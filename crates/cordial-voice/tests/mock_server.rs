@@ -1147,3 +1147,95 @@ async fn server_update_before_state_update_uses_the_new_channel() {
     assert_eq!(call.channel_id(), other_channel);
     call.disconnect();
 }
+
+/// An E2EE session without encryption that has no key until the test gives it one.
+struct KeyLater {
+    has_key: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl E2eeSession for KeyLater {
+    fn max_protocol_version(&self) -> u16 {
+        0
+    }
+
+    fn session_description(
+        &mut self,
+        _protocol_version: u16,
+        _own_user_id: UserId,
+        _channel_id: ChannelId,
+    ) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        Ok(Vec::new())
+    }
+
+    fn clients_connect(&mut self, _user_ids: &[UserId]) {}
+
+    fn client_disconnect(&mut self, _user_id: UserId) {}
+
+    fn json_message(
+        &mut self,
+        _op: u8,
+        _data: &serde_json::Value,
+    ) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        Ok(Vec::new())
+    }
+
+    fn binary_message(&mut self, _op: u8, _payload: &[u8]) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        Ok(Vec::new())
+    }
+
+    fn can_encrypt(&self) -> bool {
+        self.has_key.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    fn encrypt(&mut self, opus_frame: &[u8]) -> Result<Vec<u8>, E2eeError> {
+        if !self.can_encrypt() {
+            return Err(E2eeError::Encrypt("no key".to_owned()));
+        }
+        Ok(opus_frame.to_vec())
+    }
+
+    fn decrypt(&mut self, _sender: UserId, frame: &[u8]) -> Result<Vec<u8>, E2eeError> {
+        Ok(frame.to_vec())
+    }
+}
+
+/// A track that starts before the first E2EE key waits for the key and loses no frame.
+#[tokio::test]
+async fn track_waits_for_the_first_key() {
+    let server = MockServer::start().await;
+    let has_key = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let call = Call::connect(
+        info(server.endpoint()),
+        CallConfig::default(),
+        Box::new(KeyLater {
+            has_key: Arc::clone(&has_key),
+        }),
+    );
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("the call becomes ready");
+    let _messages = record(socket);
+
+    let audio: Vec<Vec<u8>> = (0..6_u8)
+        .map(|index| vec![0xFC, index, 0xBB, index])
+        .collect();
+    call.play(OggOpusSource::from_bytes(ogg_file(&audio)).expect("valid Ogg"));
+
+    // Without a key, no audio goes out.
+    let mut buffer = [0_u8; 2048];
+    let early = timeout(
+        Duration::from_millis(300),
+        server.udp.recv_from(&mut buffer),
+    )
+    .await;
+    assert!(early.is_err(), "a packet went out before the key");
+
+    // With the key, the track starts at its first frame.
+    has_key.store(true, std::sync::atomic::Ordering::SeqCst);
+    let packets = receive_packets(&server.udp, audio.len()).await;
+    check_sequence(&packets);
+    for (packet, expected) in packets.iter().zip(&audio) {
+        assert_eq!(&packet.payload, expected);
+    }
+    call.disconnect();
+}

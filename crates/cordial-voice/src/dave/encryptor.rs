@@ -66,6 +66,11 @@ impl Encryptor {
         self.cryptor = None;
     }
 
+    /// Tells if a frame can be sent: in passthrough, or with a key ratchet.
+    pub(crate) fn can_encrypt(&self) -> bool {
+        self.passthrough || self.ratchet.is_some()
+    }
+
     /// Sets whether frames pass through without encryption.
     pub(crate) fn set_passthrough(&mut self, passthrough: bool) {
         self.passthrough = passthrough;

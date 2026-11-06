@@ -411,6 +411,10 @@ impl E2eeSession for DaveSession {
         }
     }
 
+    fn can_encrypt(&self) -> bool {
+        self.encryptor.can_encrypt()
+    }
+
     fn encrypt(&mut self, opus_frame: &[u8]) -> Result<Vec<u8>, E2eeError> {
         if opus_frame == frame::OPUS_SILENCE_FRAME {
             return Ok(opus_frame.to_vec());

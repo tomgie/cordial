@@ -82,6 +82,13 @@ impl SendTask {
     }
 
     async fn step(&mut self, state: &mut SendState) {
+        // Before the first E2EE key, a frame cannot be encrypted. The mixer keeps the frame, so
+        // the track starts at its first frame when the key arrives.
+        if !lock_e2ee(&self.e2ee).can_encrypt() {
+            self.keep_alive(state).await;
+            return;
+        }
+
         let (output, events) = {
             let mut mixer = lock(&self.mixer);
             (mixer.next_frame(), mixer.take_events())

@@ -2,6 +2,18 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.12.0
+
+### Added
+
+- `E2eeSession::can_encrypt`: tells if the session can encrypt a frame now. The default is `true`, so other implementations do not change.
+- Example `live_voice` plays an audio file at a target loudness (default -22 LUFS). It measures the file first, and keeps the true peak at or below -1 dBTP. A list of targets, such as `-16,-22,-28`, changes the level each 20 seconds for an A/B comparison. The feature is now `symphonia`.
+
+### Fixed
+
+- The first frame of a track was lost when the track started before the first DAVE key. The send task now waits for `can_encrypt` before it takes a frame from the mixer, so the track starts at its first frame.
+- Example `live_voice`: the bot counted its own voice state from an earlier run as a person in the channel, so it did not join.
+
 ## 0.11.4
 
 ### Added

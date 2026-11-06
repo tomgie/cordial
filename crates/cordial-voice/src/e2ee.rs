@@ -71,6 +71,14 @@ pub trait E2eeSession: Send + 'static {
     /// sequence number and no opcode byte.
     fn binary_message(&mut self, op: u8, payload: &[u8]) -> Result<Vec<E2eeOutgoing>, E2eeError>;
 
+    /// Tells if [`encrypt`](Self::encrypt) can encrypt a frame now.
+    ///
+    /// The send task does not take a frame from the mixer while this is `false`, for example
+    /// before the DAVE group gives the first key. Thus the start of a track is not lost.
+    fn can_encrypt(&self) -> bool {
+        true
+    }
+
     /// Encrypts an Opus frame of the own user. Gives the frame unchanged when E2EE is off.
     fn encrypt(&mut self, opus_frame: &[u8]) -> Result<Vec<u8>, E2eeError>;
 

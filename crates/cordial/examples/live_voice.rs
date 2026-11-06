@@ -1,8 +1,8 @@
 //! A live test of a voice call with DAVE end-to-end encryption. It sends no messages and
 //! changes no commands.
 //!
-//! Run it with `DISCORD_TOKEN=... cargo run --example live_voice --features opus --
-//! <guild id> [seconds] [channel id]`.
+//! Run it with `DISCORD_TOKEN=... cargo run --example live_voice --features symphonia --
+//! <guild id> [seconds] [channel id] [audio file] [target LUFS list]`.
 //!
 //! The steps:
 //! 1. Connect to the gateway. Wait until a person joins a voice channel and is alone in it.
@@ -10,7 +10,9 @@
 //!    join other people. With a channel ID, the bot joins only that channel, and also when one
 //!    person is in it at the start.
 //! 2. Join that channel with a DAVE session. The call must use DAVE protocol version 1.
-//! 3. Play a test tone: three rising notes, then a pause, again and again.
+//! 3. Play a test tone: three rising notes, then a pause, again and again. With an audio file,
+//!    measure the file first, and play it at the target loudness (default -22 LUFS). With a
+//!    list such as `-16,-22,-28`, the level changes each 20 seconds for an A/B comparison.
 //! 4. Receive the audio of each person. Write a status line each 5 seconds with the number of
 //!    frames, the peak level, and the short-term loudness (EBU R128, 3 s window).
 //! 5. After the given time (default 120 seconds), leave the channel and write a summary with
@@ -30,6 +32,8 @@ use cordial::model::gateway::event::{Event, GuildCreate};
 use cordial::model::id::{ChannelId, GuildId, UserId};
 use ebur128::{EbuR128, Mode};
 
+use cordial::voice::audio::decode::DecodedSource;
+use cordial::voice::{AudioSource, SourceFrame};
 use cordial::voice::{
     CallConfig, DaveSession, E2eeSession, PcmSource, ShardHandles, Track, VoiceEvent, VoiceManager,
 };
@@ -40,6 +44,8 @@ type BoxError = Box<dyn std::error::Error>;
 const SAMPLE_RATE: f32 = 48_000.0;
 const STATUS_INTERVAL: Duration = Duration::from_secs(5);
 const WAIT_FOR_PERSON: Duration = Duration::from_secs(300);
+/// The time of each level in an A/B comparison.
+const LEVEL_SEGMENT: Duration = Duration::from_secs(20);
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -50,10 +56,23 @@ async fn main() -> Result<(), BoxError> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let guild_id: GuildId = args
         .first()
-        .ok_or("usage: live_voice <guild id> [seconds] [channel id]")?
+        .ok_or("usage: live_voice <guild id> [seconds] [channel id] [audio file] [target LUFS]")?
         .parse()?;
     let seconds = args.get(1).map_or(Ok(120), |text| text.parse::<u64>())?;
     let only_channel: Option<ChannelId> = args.get(2).map(|text| text.parse()).transpose()?;
+    let audio_file = args.get(3).cloned();
+    let targets: Vec<f64> = args
+        .get(4)
+        .map_or("-22", String::as_str)
+        .split(',')
+        .map(str::parse)
+        .collect::<Result<_, _>>()?;
+
+    // Measure the file before the join, because the measurement decodes the whole file.
+    let levels = match &audio_file {
+        Some(path) => normalized_volumes(path, &targets)?,
+        None => Vec::new(),
+    };
 
     let http = Client::new(Token::from_env("DISCORD_TOKEN")?);
     let mut gateway = ShardManager::builder(http, Intents::GUILDS | Intents::GUILD_VOICE_STATES)
@@ -94,15 +113,25 @@ async fn main() -> Result<(), BoxError> {
         tokio::time::sleep(Duration::from_millis(5)).await;
     };
     let call = join.await??;
-    let tone = test_tone(seconds);
-    println!("test tone: {}", Loudness::of_samples(&tone).describe());
-    call.play(Track::new(PcmSource::from_f32(tone)));
+    let track = match (&audio_file, levels.first()) {
+        (Some(path), Some(&(target, volume))) => {
+            println!("level: {target:.1} LUFS");
+            call.play(Track::new(DecodedSource::open(path)?).volume(volume))
+        }
+        _ => {
+            let tone = test_tone(seconds);
+            println!("test tone: {}", Loudness::of_samples(&tone).describe());
+            call.play(Track::new(PcmSource::from_f32(tone)))
+        }
+    };
+    let mut level_index = 0;
+    let mut switch_at = Instant::now() + LEVEL_SEGMENT;
 
     let mut report = Report::default();
     let end = Instant::now() + Duration::from_secs(seconds);
     let mut status_at = Instant::now() + STATUS_INTERVAL;
     loop {
-        let wake = end.min(status_at);
+        let wake = end.min(status_at).min(switch_at);
         match timeout_at(wake, events.recv()).await {
             Ok(Ok(event)) => report.add(event),
             Ok(Err(error)) => println!("event receiver: {error}"),
@@ -113,6 +142,16 @@ async fn main() -> Result<(), BoxError> {
         if now >= status_at {
             report.print_status();
             status_at = now + STATUS_INTERVAL;
+        }
+        // With more than one target, change the level of the song for an A/B comparison.
+        if now >= switch_at {
+            if levels.len() > 1 {
+                level_index = (level_index + 1) % levels.len();
+                let (target, volume) = levels[level_index];
+                track.set_volume(volume);
+                println!("level: {target:.1} LUFS");
+            }
+            switch_at = now + LEVEL_SEGMENT;
         }
         if now >= end {
             break;
@@ -165,21 +204,19 @@ async fn wait_for_person(
                 if let GuildCreate::Available(guild) = create.as_ref()
                     && guild.id == guild_id
                 {
+                    // A voice state of the bot itself can stay from an earlier run.
                     for state in guild.voice_states.iter().flatten() {
-                        if let Some(channel_id) = state.channel_id {
+                        if let Some(channel_id) = state.channel_id
+                            && Some(state.user_id) != own_id
+                        {
                             occupants.insert(state.user_id, channel_id);
                         }
                     }
                     println!("in voice channels at the start: {occupants:?}");
-                    if let Some(channel_id) = only_channel {
-                        let people: Vec<UserId> = occupants
-                            .iter()
-                            .filter(|&(_, &other)| other == channel_id)
-                            .map(|(&user_id, _)| user_id)
-                            .collect();
-                        if let [person] = people[..] {
-                            return Ok((channel_id, person));
-                        }
+                    if let Some(channel_id) = only_channel
+                        && let Some(person) = sole_person(&occupants, channel_id)
+                    {
+                        return Ok((channel_id, person));
                     }
                 }
                 continue;
@@ -188,22 +225,31 @@ async fn wait_for_person(
             _ => continue,
         };
 
-        let previous = match state.channel_id {
-            Some(channel_id) => occupants.insert(state.user_id, channel_id),
-            None => occupants.remove(&state.user_id),
-        };
         println!(
             "voice state: user {} in channel {:?}",
             state.user_id, state.channel_id
         );
+        if Some(state.user_id) == own_id {
+            continue;
+        }
+        let previous = match state.channel_id {
+            Some(channel_id) => occupants.insert(state.user_id, channel_id),
+            None => occupants.remove(&state.user_id),
+        };
+
+        // With a fixed channel, any change can leave one person alone in it.
+        if let Some(only) = only_channel {
+            if let Some(person) = sole_person(&occupants, only) {
+                return Ok((only, person));
+            }
+            continue;
+        }
+
         let Some(channel_id) = state.channel_id else {
             continue;
         };
-        if only_channel.is_some_and(|only| only != channel_id) {
-            continue;
-        }
         // A mute or a deafen in the same channel is not a join.
-        if Some(state.user_id) == own_id || previous == Some(channel_id) {
+        if previous == Some(channel_id) {
             continue;
         }
 
@@ -216,6 +262,46 @@ async fn wait_for_person(
         }
         println!("a person joined channel {channel_id}, but it has {people} people; waiting");
     }
+}
+
+/// Gives the person in a channel when the person is alone in it.
+fn sole_person(occupants: &HashMap<UserId, ChannelId>, channel_id: ChannelId) -> Option<UserId> {
+    let mut people = occupants
+        .iter()
+        .filter(|&(_, &other)| other == channel_id)
+        .map(|(&user_id, _)| user_id);
+    let person = people.next()?;
+    people.next().is_none().then_some(person)
+}
+
+/// The highest true peak after normalization. Opus encoding can raise peaks a little.
+const TRUE_PEAK_CEILING: f64 = -1.0;
+
+/// Measures an audio file and gives the volume factor for each target loudness. A factor is
+/// lower when the true peak would go above the ceiling.
+fn normalized_volumes(path: &str, targets: &[f64]) -> Result<Vec<(f64, f32)>, BoxError> {
+    let before = Loudness::of_file(path, 1.0)?;
+    let measured = before
+        .integrated()
+        .ok_or("the file has no audible part to measure")?;
+    println!("file: {}", before.describe());
+
+    let peak_room = TRUE_PEAK_CEILING - before.true_peak_db();
+    let mut levels = Vec::new();
+    for &target in targets {
+        let gain_db = (target - measured).min(peak_room);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a volume factor fits in f32"
+        )]
+        let volume = 10.0_f64.powf(gain_db / 20.0) as f32;
+        println!(
+            "target {target:.1} LUFS: gain {gain_db:.1} dB (volume {volume:.3}), result {:.1} LUFS",
+            measured + gain_db
+        );
+        levels.push((target, volume));
+    }
+    Ok(levels)
 }
 
 /// Gives the test tone as interleaved stereo samples: C5, E5, and G5 for 250 ms each, then
@@ -268,6 +354,34 @@ impl Loudness {
         loudness
     }
 
+    /// Decodes an audio file and measures it with a volume factor.
+    fn of_file(path: &str, volume: f32) -> Result<Self, BoxError> {
+        let mut source = DecodedSource::open(path)?;
+        let mut loudness = Self::new();
+        while let Some(frame) = source.next_frame()? {
+            if let SourceFrame::Pcm(mut pcm) = frame {
+                pcm.iter_mut().for_each(|sample| *sample *= volume);
+                loudness.meter.add_frames_f32(&pcm)?;
+            }
+        }
+        Ok(loudness)
+    }
+
+    fn integrated(&self) -> Option<f64> {
+        self.meter
+            .loudness_global()
+            .ok()
+            .filter(|value| value.is_finite())
+    }
+
+    /// Gives the highest true peak of both channels in dBTP.
+    fn true_peak_db(&self) -> f64 {
+        let true_peak = (0..2)
+            .filter_map(|channel| self.meter.true_peak(channel).ok())
+            .fold(0.0_f64, f64::max);
+        20.0 * true_peak.log10()
+    }
+
     fn add(&mut self, pcm: &[i16]) {
         // A frame always has whole stereo pairs, so the meter accepts it.
         let _ = self.meter.add_frames_i16(pcm);
@@ -279,13 +393,10 @@ impl Loudness {
 
     /// Gives the integrated loudness and the highest true peak of both channels.
     fn describe(&self) -> String {
-        let true_peak = (0..2)
-            .filter_map(|channel| self.meter.true_peak(channel).ok())
-            .fold(0.0_f64, f64::max);
         format!(
             "integrated {}, true peak {:.1} dBTP",
             lufs_text(self.meter.loudness_global()),
-            20.0 * true_peak.log10()
+            self.true_peak_db()
         )
     }
 }

@@ -543,3 +543,26 @@ fn malformed_messages_give_errors() {
         .binary_message(25, &gateway.external_sender())
         .unwrap();
 }
+
+#[test]
+fn can_encrypt_only_with_a_key_or_in_passthrough() {
+    // Version 1 without a group: the send task must wait for the key.
+    let mut gateway = Gateway::new(CHANNEL.get());
+    let (waiting, _) = join(&gateway, ALICE, &[BOB]);
+    assert!(!waiting.can_encrypt());
+
+    // After the transition to the group, the own key exists.
+    let (alice, bob, _carol) = three_member_group(&mut gateway);
+    assert!(alice.can_encrypt());
+    assert!(bob.can_encrypt());
+
+    // Version 0 passes frames through without a key.
+    let mut plain = DaveSession::new().unwrap();
+    assert!(
+        plain
+            .session_description(0, ALICE, CHANNEL)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(plain.can_encrypt());
+}

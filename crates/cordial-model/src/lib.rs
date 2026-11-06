@@ -3,3 +3,37 @@
 //! This crate has no I/O. It contains IDs, objects, enums, bit flags, gateway events,
 //! the permission calculator, builders, and client-side validation.
 //! See `docs/ARCHITECTURE.md`, section 5.
+//!
+//! # Forward compatibility
+//!
+//! Discord adds fields, enum values, and flag bits without a new API version.
+//! Every enum has an `Unknown` variant, and every flag type keeps unknown bits.
+//! Structs are `#[non_exhaustive]`.
+
+#[macro_use]
+mod macros;
+
+pub mod color;
+pub mod emoji;
+pub mod guild;
+pub mod id;
+pub mod image;
+pub mod locale;
+pub mod nullable;
+pub mod oauth2;
+pub mod permissions;
+pub mod serde_util;
+pub mod sticker;
+pub mod time;
+pub mod user;
+
+pub use color::Color;
+pub use id::Id;
+pub use image::ImageHash;
+pub use locale::Locale;
+pub use nullable::{Nullable, Patch};
+pub use permissions::Permissions;
+pub use time::Timestamp;
+
+/// The version of the Discord API that this library uses.
+pub const API_VERSION: u8 = 10;

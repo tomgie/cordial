@@ -44,6 +44,10 @@ cordial-voice = { path = "crates/cordial-voice", version = "=0.0.1" }
 cordial-macros = { path = "crates/cordial-macros", version = "=0.0.1" }
 cordial-framework = { path = "crates/cordial-framework", version = "=0.0.1" }
 
+# External crates.
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+
 [workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"

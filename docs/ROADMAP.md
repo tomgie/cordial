@@ -50,35 +50,35 @@ Exit: CI is green on an empty workspace.
 
 Base types:
 
-- [ ] `Id<T>`, markers, snowflake time helpers, string and integer decode.
-- [ ] `Timestamp` (ISO 8601).
-- [ ] `discord_enum!` macro (integer and string enums with `Unknown`).
-- [ ] Bit flags type with 64 bits and unknown-bit preservation.
-- [ ] `Nullable<T>`, `Patch<T>`, null-means-true deserializer.
-- [ ] `Permissions` (bits 0..52) and the permission calculator with implicit rules.
-- [ ] `Color`, `ImageHash` (with the animated `a_` prefix), `Locale`.
-- [ ] CDN URL builder for each asset path in research/02-http.md section 6.
-- [ ] Message formatting helpers (mentions, timestamps with styles, emoji, `<@$GAME_ID>`).
+- [x] `Id<T>`, markers, snowflake time helpers, string and integer decode.
+- [x] `Timestamp` (ISO 8601).
+- [x] `discord_enum!` macro (integer and string enums with `Unknown`).
+- [x] Bit flags type with 64 bits and unknown-bit preservation.
+- [x] `Nullable<T>`, `Patch<T>`, null-means-true deserializer.
+- [x] `Permissions` (bits 0..52) and the permission calculator with implicit rules.
+- [x] `Color`, `ImageHash` (with the animated `a_` prefix), `Locale`.
+- [x] CDN URL builder for each asset path in research/02-http.md section 6.
+- [x] Message formatting helpers (mentions, timestamps with styles, emoji, `<@$GAME_ID>`).
 
 Objects (see research/05-resources.md):
 
-- [ ] User, avatar decoration, collectibles, primary guild.
-- [ ] Guild, unavailable guild, guild preview, widget, welcome screen, onboarding, integration, ban, incidents data.
-- [ ] Member, partial member, member flags.
-- [ ] Role, role tags, role colors, partial role.
-- [ ] Channel (all 13 types), overwrites, thread metadata, thread member, forum tags, obfuscated flag.
-- [ ] Message, message types, flags, reference, snapshot, interaction metadata (union), reactions, activity, call, role subscription data, shared client theme.
-- [ ] Embed (with all flags), attachment, attachment request.
-- [ ] Emoji, sticker, sticker pack, soundboard sound.
-- [ ] Poll, poll request, poll results.
-- [ ] Invite, invite metadata, target-user job status.
-- [ ] Scheduled event, recurrence rule, event user.
-- [ ] Auto moderation rule, trigger metadata, actions.
-- [ ] Audit log, entry, change (typed accessors), optional info, all 71 action types.
-- [ ] Webhook, stage instance, guild template, voice state, voice region.
-- [ ] Application, application flags (with `flags_new`), install params, team.
-- [ ] SKU, entitlement, subscription.
-- [ ] Lobby, lobby member.
+- [x] User, avatar decoration, collectibles, primary guild.
+- [x] Guild, unavailable guild, guild preview, widget, welcome screen, onboarding, integration, ban, incidents data.
+- [x] Member, partial member, member flags.
+- [x] Role, role tags, role colors, partial role.
+- [x] Channel (all 13 types), overwrites, thread metadata, thread member, forum tags, obfuscated flag.
+- [x] Message, message types, flags, reference, snapshot, interaction metadata (union), reactions, activity, call, role subscription data, shared client theme.
+- [x] Embed (with all flags), attachment, attachment request.
+- [x] Emoji, sticker, sticker pack, soundboard sound.
+- [x] Poll, poll request, poll results.
+- [x] Invite, invite metadata, target-user job status.
+- [x] Scheduled event, recurrence rule, event user.
+- [x] Auto moderation rule, trigger metadata, actions.
+- [x] Audit log, entry, change (typed accessors), optional info, all 71 action types.
+- [x] Webhook, stage instance, guild template, voice state, voice region.
+- [x] Application, application flags (with `flags_new`), install params, team.
+- [x] SKU, entitlement, subscription.
+- [x] Lobby, lobby member.
 
 Exit: all docs examples decode and encode back without loss. Unknown values survive a round trip.
 

@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.11.3
+
+### Added
+
+- Example `live_voice` (feature `opus`): a live test of a voice call with DAVE. The bot joins a voice channel only when one person is alone in it, plays a test tone, and shows the level of the received audio. The first run in a real channel passed in both directions.
+
 ## 0.11.2
 
 ### Added

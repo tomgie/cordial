@@ -47,6 +47,10 @@ serde_json.workspace = true
 name = "http_interactions"
 required-features = ["axum"]
 
+[[example]]
+name = "live_voice"
+required-features = ["opus"]
+
 [package.metadata.docs.rs]
 all-features = true
 

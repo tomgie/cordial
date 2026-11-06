@@ -418,7 +418,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "cordial"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "axum",
  "cordial-cache",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-cache"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "cordial-model",
  "criterion",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-endpoint"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "axum",
  "bytes",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-framework"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "cordial-cache",
  "cordial-endpoint",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-gateway"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "cordial-gateway",
  "cordial-http",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-http"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "bytes",
  "cordial-http",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-macros"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "cordial-framework",
  "proc-macro-crate",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-model"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "criterion",
  "serde",
@@ -544,7 +544,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-voice"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "aes-gcm 0.10.3",
  "chacha20poly1305",
@@ -1568,7 +1568,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "libdave-interop"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "cordial-model",
  "cordial-voice",
@@ -3509,7 +3509,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.11.2"
+version = "0.11.3"
 dependencies = [
  "serde_json",
 ]

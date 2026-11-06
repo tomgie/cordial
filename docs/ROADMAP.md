@@ -98,7 +98,7 @@ Exit: all docs examples decode and encode back without loss. Unknown values surv
 - [x] First endpoints: Get Gateway, Get Gateway Bot, Get Current User, Get Channel, Create Message (with files), Edit Message, Delete Message, Get Messages.
 - [x] `xtask spec-check` first version: compare routes with the OpenAPI specification.
 
-Exit: a test bot sends a message with an attachment. Rate-limit tests pass for all 429 scopes.
+Exit: a test bot sends a message with an attachment (done live on 2026-11-06: `live_bot` example, `/ct-attach`). Rate-limit tests pass for all 429 scopes.
 
 ## P3: Gateway
 
@@ -148,7 +148,7 @@ Endpoint crate:
 - [x] Webhook events: envelope, PING (204), all event types.
 - [x] `axum` and `hyper` adapters.
 
-Exit: one example bot answers commands over the gateway. A second example answers the same commands over HTTP. (Both examples build: `ping` and `http_interactions`. A live run needs a bot token; open.)
+Exit: one example bot answers commands over the gateway (done live on 2026-11-06: `live_bot` example). A second example answers the same commands over HTTP (open: `http_interactions` needs a public HTTPS URL for the Interactions Endpoint).
 
 ## P5: Cache
 
@@ -184,7 +184,7 @@ Exit: event sequence tests pass (done). A recorded event log of 1 hour replays w
 - [x] Graceful shutdown with session export.
 - [x] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app, HTTP interactions. Live checks: `live_check`, `live_sync`.
 
-Exit: the examples run. (They build; a live run needs a bot token.) The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
+Exit: the examples run. The `live_bot` example ran on 2026-11-06 in a guild: replies, files, defer, automatic defer, buttons, select menu, modal, autocomplete, cooldown, message collector, error response, Components V2, and user and message commands. No warning and no error in the log. The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
 
 ## P7: Full HTTP coverage
 

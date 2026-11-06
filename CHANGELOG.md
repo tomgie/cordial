@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.11.1
+
+### Added
+
+- Example `live_bot`: a live test of the interactions in one guild. A person uses 12 test commands. The guild commands of other tools stay, because the sync includes them from a keep file.
+
 ## 0.11.0
 
 Tools for live tests of the gateway.

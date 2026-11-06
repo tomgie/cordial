@@ -334,6 +334,48 @@ fn sequence_never_goes_back() {
     assert_eq!(core.session().unwrap().sequence, 10);
 }
 
+fn gaps(actions: &[Action]) -> Vec<(u64, u64)> {
+    actions
+        .iter()
+        .filter_map(|action| match action {
+            Action::Lifecycle(Lifecycle::SequenceGap { expected, received }) => {
+                Some((*expected, *received))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn skipped_sequence_is_a_gap() {
+    let now = Instant::now();
+    let mut core = ready_core(now);
+
+    core.received(r#"{"op":0,"s":2,"t":"TYPING_START","d":{}}"#, now)
+        .unwrap();
+    core.received(r#"{"op":0,"s":5,"t":"TYPING_START","d":{}}"#, now)
+        .unwrap();
+
+    assert_eq!(gaps(&drain(&mut core)), [(3, 5)]);
+}
+
+#[test]
+fn new_session_and_old_sequence_are_not_gaps() {
+    let now = Instant::now();
+    let mut core = ShardCore::new(config(), now);
+    core.connected(now);
+    core.received(HELLO, now).unwrap();
+    core.identify(now);
+    let late_ready = READY.replace(r#""s":1"#, r#""s":7"#);
+    core.received(&late_ready, now).unwrap();
+    core.received(r#"{"op":0,"s":8,"t":"TYPING_START","d":{}}"#, now)
+        .unwrap();
+    core.received(r#"{"op":0,"s":6,"t":"TYPING_START","d":{}}"#, now)
+        .unwrap();
+
+    assert!(gaps(&drain(&mut core)).is_empty());
+}
+
 fn member_request(guild: u64) -> Command {
     Command::RequestGuildMembers(RequestGuildMembers::users(
         GuildId::new_const(guild),

@@ -226,6 +226,19 @@ macro_rules! events {
                     })),
                 }
             }
+
+            /// Encodes the data of the event as JSON. [`Event::decode`] with [`Event::name`]
+            /// and this data gives the same event, for example to replay a recorded event.
+            ///
+            /// # Errors
+            ///
+            /// Gives an error when the data cannot be encoded. The model types always encode.
+            pub fn encode(&self) -> Result<Box<RawValue>, serde_json::Error> {
+                match self {
+                    $(Self::$variant(payload) => serde_json::value::to_raw_value(payload),)*
+                    Self::Unknown(unknown) => Ok(unknown.data.clone()),
+                }
+            }
         }
 
         $(

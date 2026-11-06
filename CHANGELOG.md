@@ -2,6 +2,17 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.11.0
+
+Tools for live tests of the gateway.
+
+### Added
+
+- `Lifecycle::SequenceGap`: a dispatch skipped sequence numbers in one session, so events are lost. The shard also writes a warning.
+- `Event::encode`: the inverse of `Event::decode`, for example to record and replay events.
+- Example `live_gateway`: connect, fill the cache, request members, and resume the session in a new shard manager.
+- Example `live_soak`: a long run with forced disconnects, a sequence check, a round-trip check of each event, and an event log. Its `replay` mode decodes a log into a new cache.
+
 ## 0.10.3
 
 Results of the first live tests against Discord.

@@ -118,7 +118,7 @@ Exit: a test bot sends a message with an attachment. Rate-limit tests pass for a
 - [x] Channel obfuscation: handle the flag. Test with `capabilities: 1<<15`.
 - [x] Mock gateway server for driver tests.
 
-Exit (open: needs a bot token and a test guild): a test bot with 4 shards runs for 24 hours on a test guild. It resumes after forced disconnects. No event is lost (sequence check).
+Exit (open: the 24-hour run): a test bot with 4 shards runs for 24 hours on a test guild. It resumes after forced disconnects. No event is lost (sequence check). Tool: `live_soak` example. A 3-minute run on 2026-11-06 passed: 4 shards, 8/8 resumes, no gaps.
 
 ## P4: Interactions
 
@@ -161,7 +161,7 @@ Exit: one example bot answers commands over the gateway. A second example answer
 - [x] Permission helpers on the cache.
 - [x] Memory report: stack bytes per cached type (`cached_type_sizes` test). Heap measurement is in P9.
 
-Exit: event sequence tests pass (done). A recorded event log of 1 hour replays without a panic (needs a bot token; open).
+Exit: event sequence tests pass (done). A recorded event log of 1 hour replays without a panic (open: the 1-hour log). Tool: `live_soak` example, `run` and `replay` modes.
 
 ## P6: Framework and macros
 

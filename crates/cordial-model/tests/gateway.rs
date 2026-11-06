@@ -63,3 +63,31 @@ fn send_payloads() {
         &SendPayload::new(OpCode::RequestSoundboardSounds, sounds),
     );
 }
+
+/// `Event::encode` gives data that `Event::decode` turns into the same event.
+#[test]
+fn event_encode_is_the_inverse_of_decode() {
+    use cordial_model::gateway::event::Event;
+    use serde_json::value::RawValue;
+
+    let samples = [
+        (
+            "GUILD_ROLE_DELETE",
+            r#"{"guild_id":"41771983423143937","role_id":"41771983423143936"}"#,
+        ),
+        (
+            "TYPING_START",
+            r#"{"channel_id":"41771983423143937","user_id":"41771983423143936","timestamp":1700000000}"#,
+        ),
+        ("SOME_FUTURE_EVENT", r#"{"new_field":[1,2,3]}"#),
+    ];
+    for (name, data) in samples {
+        let data = RawValue::from_string(data.to_owned()).unwrap();
+        let event = Event::decode(name, &data).unwrap();
+
+        let encoded = event.encode().unwrap();
+        let decoded = Event::decode(event.name(), &encoded).unwrap();
+
+        assert_eq!(decoded, event, "{name}");
+    }
+}

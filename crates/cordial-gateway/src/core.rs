@@ -168,6 +168,14 @@ pub enum Lifecycle {
         /// The time between the heartbeat and the acknowledgement.
         latency: Duration,
     },
+    /// A dispatch skipped sequence numbers in one session. Discord sends the events of a
+    /// session in order, so the events between are lost.
+    SequenceGap {
+        /// The sequence number that the shard expected.
+        expected: u64,
+        /// The sequence number that arrived.
+        received: u64,
+    },
 }
 
 /// A fatal error: the shard must stop.
@@ -650,6 +658,20 @@ impl ShardCore {
         now: Instant,
     ) -> Result<(), serde_json::Error> {
         if let Some(sequence) = payload.s {
+            if let Some(current) = self.sequence
+                && sequence > current + 1
+            {
+                tracing::warn!(
+                    shard = self.config.shard[0],
+                    expected = current + 1,
+                    received = sequence,
+                    "the gateway skipped sequence numbers"
+                );
+                self.push_action(Action::Lifecycle(Lifecycle::SequenceGap {
+                    expected: current + 1,
+                    received: sequence,
+                }));
+            }
             self.sequence = Some(
                 self.sequence
                     .map_or(sequence, |current| current.max(sequence)),

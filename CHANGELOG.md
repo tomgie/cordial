@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.8.1
+
+### Added
+
+- A synthetic soak test of the cache: many guilds, a random event stream, a shadow model, and a leak check.
+
 ## 0.8.0
 
 ### Changed

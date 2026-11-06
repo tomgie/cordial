@@ -178,6 +178,73 @@ impl Message {
             self.channel_id, self.id
         )
     }
+
+    /// Counts a new reaction, as in a `MESSAGE_REACTION_ADD` event.
+    ///
+    /// Set `me` when the current user added the reaction.
+    pub fn add_reaction(&mut self, emoji: &PartialEmoji, burst: bool, me: bool) {
+        let reactions = self.reactions.get_or_insert_with(Vec::new);
+        let index = match reactions
+            .iter()
+            .position(|reaction| reaction.emoji.same_emoji(emoji))
+        {
+            Some(index) => index,
+            None => {
+                reactions.push(Reaction::new(emoji.clone()));
+                reactions.len() - 1
+            }
+        };
+
+        let reaction = &mut reactions[index];
+        reaction.count += 1;
+        if burst {
+            reaction.count_details.burst += 1;
+            reaction.me_burst |= me;
+        } else {
+            reaction.count_details.normal += 1;
+            reaction.me |= me;
+        }
+    }
+
+    /// Removes one reaction, as in a `MESSAGE_REACTION_REMOVE` event.
+    ///
+    /// Set `me` when the current user removed the reaction.
+    pub fn remove_reaction(&mut self, emoji: &PartialEmoji, burst: bool, me: bool) {
+        let Some(reactions) = self.reactions.as_mut() else {
+            return;
+        };
+        let Some(index) = reactions
+            .iter()
+            .position(|reaction| reaction.emoji.same_emoji(emoji))
+        else {
+            return;
+        };
+
+        let reaction = &mut reactions[index];
+        reaction.count = reaction.count.saturating_sub(1);
+        if burst {
+            reaction.count_details.burst = reaction.count_details.burst.saturating_sub(1);
+            if me {
+                reaction.me_burst = false;
+            }
+        } else {
+            reaction.count_details.normal = reaction.count_details.normal.saturating_sub(1);
+            if me {
+                reaction.me = false;
+            }
+        }
+
+        if reaction.count == 0 {
+            reactions.remove(index);
+        }
+    }
+
+    /// Removes all reactions of one emoji, as in a `MESSAGE_REACTION_REMOVE_EMOJI` event.
+    pub fn remove_reaction_emoji(&mut self, emoji: &PartialEmoji) {
+        if let Some(reactions) = self.reactions.as_mut() {
+            reactions.retain(|reaction| !reaction.emoji.same_emoji(emoji));
+        }
+    }
 }
 
 /// A mentioned user, with the partial member in gateway events.
@@ -554,6 +621,21 @@ pub struct Reaction {
     /// The hex colors of the super reaction.
     #[serde(default)]
     pub burst_colors: Vec<String>,
+}
+
+impl Reaction {
+    /// Makes a reaction with no count.
+    #[must_use]
+    pub fn new(emoji: PartialEmoji) -> Self {
+        Self {
+            count: 0,
+            count_details: ReactionCountDetails::default(),
+            me: false,
+            me_burst: false,
+            emoji,
+            burst_colors: Vec::new(),
+        }
+    }
 }
 
 /// The numbers of normal and super reactions.

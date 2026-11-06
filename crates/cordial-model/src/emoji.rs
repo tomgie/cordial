@@ -70,6 +70,18 @@ pub struct PartialEmoji {
 }
 
 impl PartialEmoji {
+    /// Tells if two emojis are the same emoji.
+    ///
+    /// Custom emojis compare by ID, because the name can change. Unicode emojis compare by name.
+    #[must_use]
+    pub fn same_emoji(&self, other: &Self) -> bool {
+        match (self.id, other.id) {
+            (Some(id), Some(other_id)) => id == other_id,
+            (None, None) => self.name == other.name,
+            _ => false,
+        }
+    }
+
     /// Makes a Unicode emoji.
     #[must_use]
     pub fn unicode(emoji: impl Into<String>) -> Self {

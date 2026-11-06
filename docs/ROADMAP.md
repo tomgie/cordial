@@ -152,16 +152,16 @@ Exit: one example bot answers commands over the gateway. A second example answer
 
 ## P5: Cache
 
-- [ ] Resource selection and the required-event set.
-- [ ] Compact cached types. Shared users.
-- [ ] Update logic for every event that changes state. Return the previous value.
-- [ ] GUILD_CREATE fill, GUILD_DELETE (outage versus removal), unavailable guilds.
-- [ ] Obfuscated channels.
-- [ ] Optional message ring buffer.
-- [ ] Permission helpers on the cache.
-- [ ] Memory benchmark: bytes per guild, member, and channel.
+- [x] Resource selection and the required-event set.
+- [x] Compact cached types. Shared users.
+- [x] Update logic for every event that changes state. Return the previous value.
+- [x] GUILD_CREATE fill, GUILD_DELETE (outage versus removal), unavailable guilds.
+- [x] Obfuscated channels.
+- [x] Optional message ring buffer. Reaction events change the cached messages.
+- [x] Permission helpers on the cache.
+- [x] Memory report: stack bytes per cached type (`cached_type_sizes` test). Heap measurement is in P9.
 
-Exit: event sequence tests pass. A recorded event log of 1 hour replays without a panic.
+Exit: event sequence tests pass (done). A recorded event log of 1 hour replays without a panic (needs a bot token; open).
 
 ## P6: Framework and macros
 

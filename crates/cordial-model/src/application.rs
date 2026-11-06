@@ -14,7 +14,7 @@ use crate::{ImageHash, Permissions};
 /// An application (an "app"). Its bot user acts for it.
 ///
 /// Partial forms of this object (for example in invites) leave many fields empty.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct Application {
     /// The application ID.

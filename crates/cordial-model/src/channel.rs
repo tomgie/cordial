@@ -126,6 +126,10 @@ pub struct Channel {
     /// The default layout of a forum channel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_forum_layout: Option<ForumLayout>,
+    /// In `THREAD_CREATE`: tells if the thread is new, not an existing thread that the
+    /// current user was added to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newly_created: Option<bool>,
 }
 
 impl Channel {
@@ -335,6 +339,9 @@ fn default_auto_archive_duration() -> AutoArchiveDuration {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct ThreadMember {
+    /// The guild ID. Only in gateway events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
     /// The thread ID. Absent in the threads of `GUILD_CREATE`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<ChannelId>,

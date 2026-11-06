@@ -8,7 +8,9 @@ use crate::auto_moderation::AutoModerationRule;
 use crate::channel::Channel;
 use crate::command::Command;
 use crate::guild::Integration;
-use crate::id::{ApplicationId, AuditLogEntryId, ChannelId, GenericId, MessageId, RoleId, UserId};
+use crate::id::{
+    ApplicationId, AuditLogEntryId, ChannelId, GenericId, GuildId, MessageId, RoleId, UserId,
+};
 use crate::scheduled_event::ScheduledEvent;
 use crate::user::User;
 use crate::webhook::Webhook;
@@ -47,6 +49,9 @@ pub struct AuditLog {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct AuditLogEntry {
+    /// The guild ID. Only in gateway events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
     /// The ID of the affected object.
     #[serde(default)]
     pub target_id: Option<String>,

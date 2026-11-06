@@ -20,7 +20,7 @@ use crate::user::User;
 use crate::{ImageHash, Locale, Permissions, Timestamp};
 
 /// A guild (a "server" in the Discord client).
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct Guild {
     /// The guild ID.
@@ -152,6 +152,43 @@ pub struct Guild {
     /// The incidents data.
     #[serde(default)]
     pub incidents_data: Option<IncidentsData>,
+    /// `GUILD_CREATE` only: when the current user joined.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joined_at: Option<Timestamp>,
+    /// `GUILD_CREATE` only: tells if the guild is large.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub large: Option<bool>,
+    /// `GUILD_CREATE` only: tells if the guild is not available because of an outage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<bool>,
+    /// `GUILD_CREATE` only: the number of members.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_count: Option<u64>,
+    /// `GUILD_CREATE` only: the voice states, without `guild_id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice_states: Option<Vec<crate::voice::VoiceState>>,
+    /// `GUILD_CREATE` only: members. For large guilds, or without `GUILD_PRESENCES`, only
+    /// the bot and members in voice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub members: Option<Vec<Member>>,
+    /// `GUILD_CREATE` only: the channels. Channels that the bot cannot view are obfuscated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channels: Option<Vec<crate::channel::Channel>>,
+    /// `GUILD_CREATE` only: the active threads that the bot can view.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threads: Option<Vec<crate::channel::Channel>>,
+    /// `GUILD_CREATE` only: the presences.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presences: Option<Vec<crate::gateway::presence::Presence>>,
+    /// `GUILD_CREATE` only: the stage instances.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_instances: Option<Vec<crate::voice::StageInstance>>,
+    /// `GUILD_CREATE` only: the scheduled events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_scheduled_events: Option<Vec<crate::scheduled_event::ScheduledEvent>>,
+    /// `GUILD_CREATE` only: the soundboard sounds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub soundboard_sounds: Option<Vec<crate::soundboard::SoundboardSound>>,
 }
 
 impl Guild {

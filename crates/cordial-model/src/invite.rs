@@ -13,7 +13,7 @@ use crate::{ImageHash, Timestamp};
 /// An invite to a guild or a group DM.
 ///
 /// The metadata fields (`uses` to `created_at`) are set only on some endpoints.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct Invite {
     /// The invite type.

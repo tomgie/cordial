@@ -22,6 +22,7 @@ pub mod command;
 pub mod component;
 pub mod embed;
 pub mod emoji;
+pub mod gateway;
 pub mod guild;
 pub mod id;
 pub mod image;

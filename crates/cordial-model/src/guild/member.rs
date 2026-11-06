@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::id::{RoleId, UserId};
+use crate::id::{GuildId, RoleId, UserId};
 use crate::user::{AvatarDecorationData, Collectibles, User};
 use crate::{ImageHash, Permissions, Timestamp};
 
@@ -10,6 +10,9 @@ use crate::{ImageHash, Permissions, Timestamp};
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct Member {
+    /// The guild ID. Only in gateway events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
     /// The user. Absent in the members of `MESSAGE_CREATE` and `MESSAGE_UPDATE` events.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<User>,
@@ -161,6 +164,7 @@ impl PartialMember {
     #[must_use]
     pub fn into_member(self, user: User) -> Member {
         Member {
+            guild_id: None,
             user: Some(user),
             nick: self.nick,
             avatar: self.avatar,

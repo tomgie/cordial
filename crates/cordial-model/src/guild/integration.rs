@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ImageHash;
 use crate::Timestamp;
-use crate::id::{ApplicationId, IntegrationId, RoleId};
+use crate::id::{ApplicationId, GuildId, IntegrationId, RoleId};
 use crate::oauth2::Scope;
 use crate::user::User;
 
@@ -14,6 +14,9 @@ use crate::user::User;
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct Integration {
+    /// The guild ID. Only in gateway events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<GuildId>,
     /// The integration ID.
     pub id: IntegrationId,
     /// The name.

@@ -138,10 +138,11 @@ impl ShardManagerBuilder {
         self
     }
 
-    /// Sets the member count above which Discord does not send offline members.
+    /// Sets the member count above which Discord does not send offline members. The value
+    /// is clamped to 50 to 250, as [`ShardConfig::large_threshold`] does.
     #[must_use]
     pub fn large_threshold(mut self, threshold: u8) -> Self {
-        self.large_threshold = Some(threshold);
+        self.large_threshold = Some(threshold.clamp(50, 250));
         self
     }
 
@@ -326,6 +327,20 @@ pub fn shard_id_for_guild(guild_id: cordial_model::id::GuildId, shard_count: u32
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn large_threshold_is_clamped() {
+        let builder = || {
+            ShardManagerBuilder::new(
+                Client::new(cordial_http::Token::bot("TOKEN")),
+                Intents::GUILDS,
+            )
+        };
+
+        assert_eq!(builder().large_threshold(10).large_threshold, Some(50));
+        assert_eq!(builder().large_threshold(255).large_threshold, Some(250));
+        assert_eq!(builder().large_threshold(100).large_threshold, Some(100));
+    }
 
     #[test]
     fn shard_formula() {

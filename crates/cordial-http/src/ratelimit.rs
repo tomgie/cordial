@@ -199,13 +199,15 @@ impl RateLimiter for InMemoryRateLimiter {
         let global_limit = route.global_limit;
 
         Box::pin(async move {
-            if global_limit {
-                state.wait_for_global().await;
-            }
-
             let bucket = state.bucket_for(&key);
             let queue_guard = Arc::clone(&bucket.queue).lock_owned().await;
             let keep_queue = bucket.wait_for_capacity().await;
+
+            // Take the global slot last. A slot taken before a long bucket wait is not used in
+            // its second, and many such requests then go out together at the bucket reset.
+            if global_limit {
+                state.wait_for_global().await;
+            }
 
             state.maybe_clean_up();
 
@@ -349,9 +351,17 @@ impl State {
             id: BucketId::Hash(hash),
             major: key.major,
         };
-        lock(&self.buckets)
+        let route_key = BucketKey {
+            id: BucketId::Route(key.method, key.template),
+            major: key.major,
+        };
+        let mut buckets = lock(&self.buckets);
+        buckets
             .entry(bucket_key)
             .or_insert_with(|| Arc::clone(bucket));
+        // New requests find the bucket by its hash now. A second map entry keeps the strong
+        // count high, and then the clean-up never removes the bucket.
+        buckets.remove(&route_key);
     }
 
     fn maybe_clean_up(&self) {
@@ -383,7 +393,10 @@ struct Bucket {
 struct BucketState {
     limit: Option<u32>,
     remaining: u32,
+    /// When `limit` is known, this is always known too (from a response or an estimate).
     reset_at: Option<Instant>,
+    /// The estimated length of one window: the longest `reset_after` of the current window.
+    window: Duration,
     /// The route sends no rate limit headers: no limit applies.
     unlimited: bool,
     last_used: Instant,
@@ -397,6 +410,7 @@ impl Bucket {
                 limit: None,
                 remaining: 0,
                 reset_at: None,
+                window: Duration::ZERO,
                 unlimited: false,
                 last_used: Instant::now(),
             }),
@@ -420,8 +434,10 @@ impl Bucket {
                 if let Some(reset_at) = state.reset_at
                     && now >= reset_at
                 {
+                    // Keep an estimated reset time. Without one, the next empty bucket cannot
+                    // wait, and a late response cannot see the requests that are in flight.
                     state.remaining = state.limit.unwrap_or(1);
-                    state.reset_at = None;
+                    state.reset_at = Some(deadline(now, state.window_or_default()));
                 }
 
                 let Some(_limit) = state.limit else {
@@ -431,11 +447,8 @@ impl Bucket {
                     state.remaining -= 1;
                     return false;
                 }
-                match state.reset_at {
-                    Some(reset_at) => reset_at,
-                    // The bucket is empty but the reset time is not known. Wait for a response.
-                    None => return true,
-                }
+                let window = state.window_or_default();
+                *state.reset_at.get_or_insert_with(|| deadline(now, window))
             };
 
             tracing::debug!(
@@ -454,17 +467,23 @@ impl Bucket {
             (headers.limit, headers.remaining, headers.reset_after)
         {
             let new_reset = deadline(now, reset_after);
-            // Responses can arrive out of order. Trust the headers fully only for a new window.
-            let new_window = state
-                .reset_at
-                .is_none_or(|current| new_reset > current + Duration::from_millis(500));
+            let reset_after = reset_after.min(MAX_WAIT);
             state.limit = Some(limit);
             state.unlimited = false;
-            if new_window {
-                state.remaining = remaining;
-                state.reset_at = Some(new_reset);
-            } else {
-                state.remaining = state.remaining.min(remaining);
+            // Responses can arrive out of order. Trust the headers fully only for a new window,
+            // and ignore a late response of an earlier window.
+            match state.reset_at {
+                Some(current) if new_reset + WINDOW_TOLERANCE < current => {}
+                Some(current) if new_reset <= current + WINDOW_TOLERANCE => {
+                    state.remaining = state.remaining.min(remaining);
+                    state.reset_at = Some(current.max(new_reset));
+                    state.window = state.window.max(reset_after);
+                }
+                _ => {
+                    state.remaining = remaining;
+                    state.reset_at = Some(new_reset);
+                    state.window = reset_after;
+                }
             }
         } else if (200..300).contains(&status) && state.limit.is_none() {
             state.unlimited = true;
@@ -479,6 +498,23 @@ impl Bucket {
             state.unlimited = false;
             state.remaining = 0;
             state.reset_at = Some(deadline(now, retry_after));
+            if state.window.is_zero() {
+                state.window = retry_after.min(MAX_WAIT);
+            }
+        }
+    }
+}
+
+/// The difference between two reset times of the same window, from network delays.
+const WINDOW_TOLERANCE: Duration = Duration::from_millis(500);
+
+impl BucketState {
+    /// Gives the window length. A window of zero would let all requests through.
+    fn window_or_default(&self) -> Duration {
+        if self.window.is_zero() {
+            Duration::from_secs(1)
+        } else {
+            self.window
         }
     }
 }
@@ -706,5 +742,138 @@ mod tests {
         }
 
         assert!(limiter.global_pause_remaining().is_some());
+    }
+
+    /// Tells if `acquire` finishes within 10 ms of test time.
+    async fn acquires_at_once(limiter: &InMemoryRateLimiter, channel: u64) -> bool {
+        tokio::time::timeout(Duration::from_millis(10), limiter.acquire(&route(channel)))
+            .await
+            .is_ok()
+    }
+
+    /// After the local reset, the bucket forgot its reset time. Then the request after the
+    /// last unit went out at once and got a 429.
+    #[tokio::test(start_paused = true)]
+    async fn empty_bucket_waits_after_local_reset() {
+        let limiter = InMemoryRateLimiter::new();
+        limiter
+            .acquire(&route(1))
+            .await
+            .complete(Outcome::Response {
+                status: 200,
+                headers: &headers(1, 0, 2.0),
+            });
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        let first = limiter.acquire(&route(1)).await;
+        let second_at_once = acquires_at_once(&limiter, 1).await;
+
+        assert!(!second_at_once);
+        drop(first);
+    }
+
+    /// After a 429, the bucket has a limit of 1. Two requests went out together at the reset.
+    #[tokio::test(start_paused = true)]
+    async fn bucket_after_429_lets_one_request_through() {
+        let limiter = InMemoryRateLimiter::new();
+        let too_many = RateLimitHeaders {
+            retry_after: Some(Duration::from_secs(1)),
+            ..RateLimitHeaders::default()
+        };
+        limiter
+            .acquire(&route(1))
+            .await
+            .complete(Outcome::Response {
+                status: 429,
+                headers: &too_many,
+            });
+        tokio::time::advance(Duration::from_secs(1)).await;
+
+        let first = limiter.acquire(&route(1)).await;
+        let second_at_once = acquires_at_once(&limiter, 1).await;
+
+        assert!(!second_at_once);
+        drop(first);
+    }
+
+    /// The first response after the local reset set `remaining` from its header and forgot
+    /// the other requests in flight.
+    #[tokio::test(start_paused = true)]
+    async fn response_after_local_reset_counts_requests_in_flight() {
+        let limiter = InMemoryRateLimiter::new();
+        limiter
+            .acquire(&route(1))
+            .await
+            .complete(Outcome::Response {
+                status: 200,
+                headers: &headers(3, 0, 2.0),
+            });
+        tokio::time::advance(Duration::from_secs(2)).await;
+
+        let mut in_flight = Vec::new();
+        for _ in 0..3 {
+            in_flight.push(limiter.acquire(&route(1)).await);
+        }
+        // Discord counted only the first request when it sent this response.
+        in_flight.pop().unwrap().complete(Outcome::Response {
+            status: 200,
+            headers: &headers(3, 2, 1.9),
+        });
+        let fourth_at_once = acquires_at_once(&limiter, 1).await;
+
+        assert!(!fourth_at_once);
+    }
+
+    /// A request took a global slot before it waited for its empty bucket. The slot was
+    /// lost for other routes.
+    #[tokio::test(start_paused = true)]
+    async fn waiting_request_does_not_hold_a_global_slot() {
+        let limiter = InMemoryRateLimiter::with_global_limit(1);
+        limiter
+            .acquire(&route(1))
+            .await
+            .complete(Outcome::Response {
+                status: 200,
+                headers: &headers(1, 0, 5.0),
+            });
+        tokio::time::advance(Duration::from_secs(1)).await;
+
+        let waiting = tokio::spawn({
+            let limiter = limiter.clone();
+            async move { limiter.acquire(&route(1)).await }
+        });
+        tokio::task::yield_now().await;
+        let other_at_once = acquires_at_once(&limiter, 2).await;
+
+        assert!(other_at_once);
+        waiting.abort();
+    }
+
+    /// The first bucket of a route stayed in the map under two keys, so the clean-up never
+    /// removed it.
+    #[tokio::test(start_paused = true)]
+    async fn clean_up_removes_idle_learned_buckets() {
+        let limiter = InMemoryRateLimiter::with_global_limit(u32::MAX);
+        limiter
+            .acquire(&route(1))
+            .await
+            .complete(Outcome::Response {
+                status: 200,
+                headers: &headers(5, 4, 1.0),
+            });
+        tokio::time::advance(Duration::from_secs(301)).await;
+
+        // The clean-up runs once for each 4096 acquisitions.
+        for _ in 0..4096 {
+            limiter
+                .acquire(&route(2))
+                .await
+                .complete(Outcome::Response {
+                    status: 200,
+                    headers: &RateLimitHeaders::default(),
+                });
+        }
+
+        assert_eq!(limiter.bucket_count(), 1);
     }
 }

@@ -2,6 +2,24 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.10.2
+
+Fixes for the problems that a review of the gateway and HTTP crates found.
+
+### Fixed
+
+- Rate limiter: after the local reset of a bucket, the limiter keeps an estimated reset time. Before, an empty bucket sent the next request at once and got a 429. This also occurred after each 429.
+- Rate limiter: the first response after the local reset counts the requests that are in flight. A late response of an earlier window does not change the bucket.
+- Rate limiter: a request takes its global slot after the wait for its bucket, not before. Before, many requests to empty buckets went out together and got a global 429.
+- Rate limiter: the clean-up removes idle buckets after Discord gives the bucket hash. Before, the first bucket of each route stayed in memory.
+- Gateway: a shard with queued commands and no active session does not wake up again and again (high CPU load).
+- Gateway: `ShardHandle::send`, `request_members`, and `close` answer while the shard connects or waits to connect again. Commands wait in the queue and go out when the session is active. `close` stops the shard at once.
+- Gateway: handle calls from the task that reads the events do not deadlock when the event channel is full.
+- Gateway: a failed send reconnects one time. Commands that did not go out stay in the queue for the next session. Before, extra reconnects closed the next connection, and the commands were lost.
+- Gateway: when Hello does not arrive within 20 seconds, the shard connects again.
+- Gateway: `MemberChunks` no longer stops the shard when the caller does not read the chunks. `MemberChunks::next` gives `None` after a new session, and when no chunk arrives within 60 seconds.
+- Gateway: `ShardManagerBuilder::large_threshold` clamps the value to 50 to 250, as `ShardConfig::large_threshold` does.
+
 ## 0.10.1
 
 Fixes in `cordial-voice` from a review of the voice connection.

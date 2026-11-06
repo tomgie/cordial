@@ -333,3 +333,101 @@ fn sequence_never_goes_back() {
 
     assert_eq!(core.session().unwrap().sequence, 10);
 }
+
+fn member_request(guild: u64) -> Command {
+    Command::RequestGuildMembers(RequestGuildMembers::users(
+        GuildId::new_const(guild),
+        vec![],
+    ))
+}
+
+fn reconnects(actions: &[Action]) -> usize {
+    actions
+        .iter()
+        .filter(|action| matches!(action, Action::Reconnect { .. }))
+        .count()
+}
+
+/// A queued command before READY made the deadline the old end of the send window. The
+/// driver then woke up again and again without a pause.
+#[test]
+fn deadline_moves_forward_while_not_active() {
+    let now = Instant::now();
+    let mut core = ShardCore::new(config(), now);
+    core.connected(now);
+    core.received(
+        r#"{"op":10,"d":{"heartbeat_interval":1000000},"s":null,"t":null}"#,
+        now,
+    )
+    .unwrap();
+    core.send_command(&member_request(1), now).unwrap();
+    drain(&mut core);
+
+    // Do what the driver loop does: tick at each deadline.
+    for _ in 0..3 {
+        let Some(deadline) = core.next_deadline() else {
+            break;
+        };
+        core.tick(deadline);
+        drain(&mut core);
+
+        assert!(core.next_deadline().is_none_or(|next| next > deadline));
+    }
+}
+
+/// Without Hello, the shard waited for ever.
+#[test]
+fn reconnects_when_hello_does_not_arrive() {
+    let now = Instant::now();
+    let mut core = ShardCore::new(config(), now);
+    core.connected(now);
+
+    assert_eq!(core.next_deadline(), Some(now + Duration::from_secs(20)));
+    core.tick(now + Duration::from_secs(20));
+
+    assert_eq!(reconnects(&drain(&mut core)), 1);
+}
+
+#[test]
+fn hello_ends_the_hello_timeout() {
+    let now = Instant::now();
+    let mut core = ShardCore::new(config(), now);
+    core.connected(now);
+    core.received(HELLO, now).unwrap();
+    drain(&mut core);
+
+    core.tick(now + Duration::from_secs(20));
+
+    assert_eq!(reconnects(&drain(&mut core)), 0);
+}
+
+/// Each failed send added a reconnect. The extra ones closed the next connection, and the
+/// queued commands were lost.
+#[test]
+fn failed_send_reconnects_once_and_keeps_commands() {
+    let now = Instant::now();
+    let mut core = ready_core(now);
+    core.send_command(&member_request(1), now).unwrap();
+    core.send_command(&member_request(2), now).unwrap();
+
+    // The driver takes the first send, the send fails, and the driver reports it twice.
+    assert!(matches!(core.poll_action(), Some(Action::Send(_))));
+    core.closed(None, now);
+    core.closed(None, now);
+    let actions = drain(&mut core);
+
+    assert_eq!(reconnects(&actions), 1);
+    assert!(sent(&actions).is_empty());
+
+    core.connected(now);
+    core.received(HELLO, now).unwrap();
+    core.received(r#"{"op":0,"s":2,"t":"RESUMED","d":null}"#, now)
+        .unwrap();
+    let payloads = sent(&drain(&mut core));
+    let guilds: Vec<&Value> = payloads
+        .iter()
+        .filter(|payload| payload["op"] == 8)
+        .map(|payload| &payload["d"]["guild_id"])
+        .collect();
+    assert_eq!(guilds, vec!["2"]);
+}

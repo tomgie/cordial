@@ -102,7 +102,7 @@ async fn refuses_webhook_name_with_discord() {
 
     let reserved = client.create_webhook(CHANNEL, "My Discord hook").await;
     let empty = client.create_webhook(CHANNEL, "").await;
-    let long = client.modify_webhook(WEBHOOK).name("a".repeat(81)).await;
+    let long = client.edit_webhook(WEBHOOK).name("a".repeat(81)).await;
 
     assert!(matches!(reserved, Err(Error::Validation(_))));
     assert!(matches!(empty, Err(Error::Validation(_))));
@@ -171,7 +171,7 @@ async fn modifies_a_webhook() {
     transport.push(FakeResponse::json(200, &webhook_json()));
 
     client(&transport)
-        .modify_webhook(WEBHOOK)
+        .edit_webhook(WEBHOOK)
         .name("renamed")
         .clear_avatar()
         .channel_id(ChannelId::new_const(5))
@@ -196,7 +196,7 @@ async fn modifies_a_webhook_with_token() {
     transport.push(FakeResponse::json(200, &webhook_json()));
 
     client(&transport)
-        .modify_webhook_with_token(WEBHOOK, TOKEN)
+        .edit_webhook_with_token(WEBHOOK, TOKEN)
         .avatar(ImageData::from_data_uri("data:image/png;base64,AAAA"))
         .await
         .unwrap();
@@ -380,6 +380,7 @@ async fn executes_a_github_webhook() {
 
     client(&transport)
         .execute_github_webhook(WEBHOOK, TOKEN, payload.clone())
+        .event("push")
         .await
         .unwrap();
 
@@ -387,6 +388,7 @@ async fn executes_a_github_webhook() {
     assert_eq!(request.method, "POST");
     assert_eq!(request.url, token_url("/github"));
     assert_eq!(request.header("authorization"), None);
+    assert_eq!(request.header("x-github-event"), Some("push"));
     assert_eq!(request.json(), payload);
 }
 

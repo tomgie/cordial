@@ -69,7 +69,7 @@ pub enum MajorParameter {
     Channel(ChannelId),
     /// A guild.
     Guild(GuildId),
-    /// A webhook, with a hash of its token.
+    /// A webhook, with a hash of its token (0 for routes without the token).
     Webhook(WebhookId, u64),
 }
 

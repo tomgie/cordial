@@ -132,6 +132,7 @@ impl Client {
         let body = endpoint.body(self.inner.validate)?;
         let retry_safe = endpoint.retry_safe();
         let reason = endpoint.audit_reason();
+        let extra_headers = endpoint.headers();
         let mut attempt = 0;
         let mut rate_limit_attempt = 0;
 
@@ -139,7 +140,7 @@ impl Client {
             self.slow_down_if_near_ban().await;
 
             let ticket = self.inner.rate_limiter.acquire(route).await;
-            let request = self.build_request(route, &body, reason)?;
+            let request = self.build_request(route, &body, reason, &extra_headers)?;
 
             let span = tracing::debug_span!("request", method = %route.method, route = route.template, attempt);
             let sending =
@@ -246,6 +247,7 @@ impl Client {
         route: &Route,
         body: &RequestBody,
         reason: Option<&str>,
+        extra_headers: &[(&'static str, String)],
     ) -> Result<http::Request<Bytes>, Error> {
         let url = format!("{}{}", self.inner.base_url, route.path);
         let mut builder = http::Request::builder()
@@ -262,6 +264,10 @@ impl Client {
             let encoded =
                 percent_encoding::utf8_percent_encode(reason, crate::QUERY_ENCODE_SET).to_string();
             builder = builder.header("X-Audit-Log-Reason", encoded);
+        }
+
+        for (name, value) in extra_headers {
+            builder = builder.header(*name, value);
         }
 
         let body_bytes = match body.encode() {

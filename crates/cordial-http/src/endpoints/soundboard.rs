@@ -274,7 +274,7 @@ impl Endpoint for CreateGuildSoundboardSound {
 /// `PATCH /guilds/{guild.id}/soundboard-sounds/{sound.id}`: changes a sound of a guild.
 #[derive(Clone, Debug)]
 #[must_use = "a request does nothing until it is awaited"]
-pub struct ModifyGuildSoundboardSound {
+pub struct EditGuildSoundboardSound {
     client: Client,
     guild_id: GuildId,
     sound_id: SoundboardSoundId,
@@ -294,7 +294,7 @@ struct ModifySoundBody {
     emoji_name: Patch<String>,
 }
 
-impl ModifyGuildSoundboardSound {
+impl EditGuildSoundboardSound {
     /// Sets the name (2 to 32 characters).
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.fields.name = Some(name.into());
@@ -326,7 +326,7 @@ impl ModifyGuildSoundboardSound {
     }
 }
 
-impl Endpoint for ModifyGuildSoundboardSound {
+impl Endpoint for EditGuildSoundboardSound {
     type Response = SoundboardSound;
 
     fn route(&self) -> Route {
@@ -403,7 +403,7 @@ super::into_future!(
     GetGuildSoundboardSounds,
     GetGuildSoundboardSound,
     CreateGuildSoundboardSound,
-    ModifyGuildSoundboardSound,
+    EditGuildSoundboardSound,
     DeleteGuildSoundboardSound,
 );
 
@@ -474,12 +474,12 @@ impl Client {
     }
 
     /// Changes a soundboard sound of a guild.
-    pub fn modify_guild_soundboard_sound(
+    pub fn edit_guild_soundboard_sound(
         &self,
         guild_id: GuildId,
         sound_id: SoundboardSoundId,
-    ) -> ModifyGuildSoundboardSound {
-        ModifyGuildSoundboardSound {
+    ) -> EditGuildSoundboardSound {
+        EditGuildSoundboardSound {
             client: self.clone(),
             guild_id,
             sound_id,

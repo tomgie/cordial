@@ -33,6 +33,11 @@ pub trait Endpoint: Send + Sync {
         None
     }
 
+    /// Gives extra request headers, for example `X-GitHub-Event`.
+    fn headers(&self) -> Vec<(&'static str, String)> {
+        Vec::new()
+    }
+
     /// Tells if a POST request is safe to retry, for example a message with `enforce_nonce`.
     fn retry_safe(&self) -> bool {
         self.route().method.is_idempotent()

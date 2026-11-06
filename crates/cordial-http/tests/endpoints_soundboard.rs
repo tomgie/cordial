@@ -169,7 +169,7 @@ async fn refuses_a_bad_sound_name_or_volume() {
         .create_guild_soundboard_sound(GUILD, "Y", SoundData::from_bytes(b"ID3"))
         .await;
     let loud = client
-        .modify_guild_soundboard_sound(GUILD, SOUND)
+        .edit_guild_soundboard_sound(GUILD, SOUND)
         .volume(Some(1.5))
         .await;
 
@@ -184,7 +184,7 @@ async fn modifies_a_guild_sound() {
     transport.push(FakeResponse::json(200, &guild_sound_json()));
 
     client(&transport)
-        .modify_guild_soundboard_sound(GUILD, SOUND)
+        .edit_guild_soundboard_sound(GUILD, SOUND)
         .name("Hooray")
         .emoji_id(None)
         .emoji_name(Some("🎉".to_owned()))

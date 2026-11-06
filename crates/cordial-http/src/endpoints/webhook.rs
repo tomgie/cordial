@@ -213,7 +213,7 @@ impl Endpoint for GetWebhook {
             Method::Get,
             "/webhooks/{webhook_id}",
             format!("/webhooks/{}", self.webhook_id),
-            MajorParameter::None,
+            MajorParameter::Webhook(self.webhook_id, 0),
         )
     }
 }
@@ -243,7 +243,7 @@ impl Endpoint for GetWebhookWithToken {
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
-struct ModifyWebhookBody {
+struct EditWebhookBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
     #[serde(skip_serializing_if = "Patch::is_keep")]
@@ -252,7 +252,7 @@ struct ModifyWebhookBody {
     channel_id: Option<ChannelId>,
 }
 
-impl ModifyWebhookBody {
+impl EditWebhookBody {
     fn encode(&self, validate: bool) -> Result<RequestBody, Error> {
         check(validate, || match &self.name {
             Some(name) => check_webhook_name(name),
@@ -265,14 +265,14 @@ impl ModifyWebhookBody {
 /// `PATCH /webhooks/{webhook.id}`: changes a webhook.
 #[derive(Clone, Debug)]
 #[must_use = "a request does nothing until it is awaited"]
-pub struct ModifyWebhook {
+pub struct EditWebhook {
     client: Client,
     webhook_id: WebhookId,
-    fields: ModifyWebhookBody,
+    fields: EditWebhookBody,
     reason: Option<String>,
 }
 
-impl ModifyWebhook {
+impl EditWebhook {
     /// Sets the default name (1 to 80 characters).
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.fields.name = Some(name.into());
@@ -304,7 +304,7 @@ impl ModifyWebhook {
     }
 }
 
-impl Endpoint for ModifyWebhook {
+impl Endpoint for EditWebhook {
     type Response = Webhook;
 
     fn route(&self) -> Route {
@@ -312,7 +312,7 @@ impl Endpoint for ModifyWebhook {
             Method::Patch,
             "/webhooks/{webhook_id}",
             format!("/webhooks/{}", self.webhook_id),
-            MajorParameter::None,
+            MajorParameter::Webhook(self.webhook_id, 0),
         )
     }
 
@@ -329,15 +329,15 @@ impl Endpoint for ModifyWebhook {
 /// of the client token. It cannot move the webhook to a different channel.
 #[derive(Clone, Debug)]
 #[must_use = "a request does nothing until it is awaited"]
-pub struct ModifyWebhookWithToken {
+pub struct EditWebhookWithToken {
     client: Client,
     webhook_id: WebhookId,
     token: PathToken,
-    fields: ModifyWebhookBody,
+    fields: EditWebhookBody,
     reason: Option<String>,
 }
 
-impl ModifyWebhookWithToken {
+impl EditWebhookWithToken {
     /// Sets the default name (1 to 80 characters).
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.fields.name = Some(name.into());
@@ -363,7 +363,7 @@ impl ModifyWebhookWithToken {
     }
 }
 
-impl Endpoint for ModifyWebhookWithToken {
+impl Endpoint for EditWebhookWithToken {
     type Response = Webhook;
 
     fn route(&self) -> Route {
@@ -410,7 +410,7 @@ impl Endpoint for DeleteWebhook {
             Method::Delete,
             "/webhooks/{webhook_id}",
             format!("/webhooks/{}", self.webhook_id),
-            MajorParameter::None,
+            MajorParameter::Webhook(self.webhook_id, 0),
         )
     }
 
@@ -730,8 +730,8 @@ impl Endpoint for ExecuteSlackWebhook {
 /// The body is the GitHub event payload. Discord supports only some events, for example
 /// `push`, `issues`, and `pull_request`.
 ///
-/// GitHub gives the event name in the `X-GitHub-Event` header. This request cannot send that
-/// header yet, because the `Endpoint` trait has no custom headers.
+/// GitHub gives the event name in the `X-GitHub-Event` header. Set it with
+/// [`ExecuteGitHubWebhook::event`].
 #[derive(Clone, Debug)]
 #[must_use = "a request does nothing until it is awaited"]
 pub struct ExecuteGitHubWebhook {
@@ -741,9 +741,16 @@ pub struct ExecuteGitHubWebhook {
     payload: serde_json::Value,
     thread_id: Option<ChannelId>,
     wait: Option<bool>,
+    event: Option<String>,
 }
 
 impl ExecuteGitHubWebhook {
+    /// Sets the GitHub event name for the `X-GitHub-Event` header, for example `push`.
+    pub fn event(mut self, event: impl Into<String>) -> Self {
+        self.event = Some(event.into());
+        self
+    }
+
     /// Sends the message in a thread of the webhook channel.
     pub fn thread_id(mut self, thread_id: ChannelId) -> Self {
         self.thread_id = Some(thread_id);
@@ -777,6 +784,13 @@ impl Endpoint for ExecuteGitHubWebhook {
 
     fn body(&self, _validate: bool) -> Result<RequestBody, Error> {
         RequestBody::json(&self.payload)
+    }
+
+    fn headers(&self) -> Vec<(&'static str, String)> {
+        self.event
+            .iter()
+            .map(|event| ("X-GitHub-Event", event.clone()))
+            .collect()
     }
 }
 
@@ -957,8 +971,8 @@ super::into_future!(
     GetGuildWebhooks,
     GetWebhook,
     GetWebhookWithToken,
-    ModifyWebhook,
-    ModifyWebhookWithToken,
+    EditWebhook,
+    EditWebhookWithToken,
     DeleteWebhook,
     DeleteWebhookWithToken,
     ExecuteWebhook,
@@ -1020,26 +1034,26 @@ impl Client {
     }
 
     /// Changes a webhook.
-    pub fn modify_webhook(&self, webhook_id: WebhookId) -> ModifyWebhook {
-        ModifyWebhook {
+    pub fn edit_webhook(&self, webhook_id: WebhookId) -> EditWebhook {
+        EditWebhook {
             client: self.clone(),
             webhook_id,
-            fields: ModifyWebhookBody::default(),
+            fields: EditWebhookBody::default(),
             reason: None,
         }
     }
 
     /// Changes a webhook with its token. The request does not use the client token.
-    pub fn modify_webhook_with_token(
+    pub fn edit_webhook_with_token(
         &self,
         webhook_id: WebhookId,
         token: impl Into<String>,
-    ) -> ModifyWebhookWithToken {
-        ModifyWebhookWithToken {
+    ) -> EditWebhookWithToken {
+        EditWebhookWithToken {
             client: self.clone(),
             webhook_id,
             token: PathToken::new(token),
-            fields: ModifyWebhookBody::default(),
+            fields: EditWebhookBody::default(),
             reason: None,
         }
     }
@@ -1115,6 +1129,7 @@ impl Client {
             payload,
             thread_id: None,
             wait: None,
+            event: None,
         }
     }
 

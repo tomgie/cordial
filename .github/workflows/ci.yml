@@ -36,8 +36,8 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features
       - run: cargo doc --workspace --all-features --no-deps
-      # Reports the endpoints that are not implemented. Phase P7 makes it strict.
-      - run: cargo xtask spec-check fixtures/spec/openapi.json
+      # Fails when an endpoint of the specification is not implemented.
+      - run: cargo xtask spec-check fixtures/spec/openapi.json --strict
 
   features:
     name: Feature combinations

@@ -2,6 +2,20 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.10.3
+
+Results of the first live tests against Discord.
+
+### Added
+
+- Example `live_check`: a read-only check of a bot token (user, application, gateway, guilds, global commands).
+- Example `live_sync`: a live test of the command sync in one guild (create, update, rename, bulk overwrite, delete). After each change, a second sync must find no changes.
+- Sync tests with real command lists from Discord (`crates/cordial-framework/tests/sync_fixtures.rs`).
+
+### Fixed
+
+- Command sync: a guild command with `contexts` or `integration_types` no longer shows an update at each sync. Discord drops these fields from guild commands, so the comparison ignores them for a guild command. The sync writes a warning for such a definition.
+
 ## 0.10.2
 
 Fixes for the problems that a review of the gateway and HTTP crates found.

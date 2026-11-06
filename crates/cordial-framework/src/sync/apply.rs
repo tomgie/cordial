@@ -92,6 +92,10 @@ pub async fn sync(
         scope,
     };
 
+    if let SyncScope::Guild(_) = scope {
+        warn_global_only_fields(local);
+    }
+
     let remote = target.fetch().await.map_err(SyncError::Fetch)?;
     let plan = plan(local, &remote, options)?;
     tracing::info!(%scope, dry_run = options.dry_run, "command sync plan: {plan}");
@@ -112,6 +116,19 @@ pub async fn sync(
     };
 
     Ok(SyncReport { plan, outcome })
+}
+
+/// Warns about settings that Discord drops from guild commands.
+fn warn_global_only_fields(local: &[SyncCommand]) {
+    for command in local {
+        let definition = &command.definition;
+        if definition.contexts.is_some() || definition.integration_types.is_some() {
+            tracing::warn!(
+                command = %definition.name,
+                "contexts and integration_types have no effect on a guild command"
+            );
+        }
+    }
 }
 
 /// The application and the scope that receive the requests.

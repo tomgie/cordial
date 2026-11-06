@@ -29,6 +29,10 @@ const DEPRECATED_FIELDS: [&str; 2] = ["dm_permission", "default_permission"];
 /// - `handler`: Discord sets it on the Entry Point command that it makes for an activity.
 const LOCAL_ONLY_FIELDS: [&str; 3] = ["integration_types", "contexts", "handler"];
 
+/// Fields that only global commands have. Discord accepts them on a guild command, but drops
+/// them, so a guild command never gives them back.
+const GLOBAL_ONLY_FIELDS: [&str; 2] = ["integration_types", "contexts"];
+
 /// Boolean fields where `false` is the default.
 const FALSE_DEFAULT_FIELDS: [&str; 3] = ["nsfw", "required", "autocomplete"];
 
@@ -41,6 +45,8 @@ const DEFAULT_CONTEXTS: [u8; 3] = [0, 1, 2];
 
 /// Tells if a local definition and a remote command have the same content.
 pub(super) fn is_same(local: &CommandDefinition, remote: &Command) -> bool {
+    let guild_command = remote.guild_id.is_some();
+
     // The model types always encode, because all their map keys are strings.
     let local = serde_json::to_value(local).unwrap_or(Value::Null);
     let remote = serde_json::to_value(remote).unwrap_or(Value::Null);
@@ -51,6 +57,13 @@ pub(super) fn is_same(local: &CommandDefinition, remote: &Command) -> bool {
     for field in DISCORD_ONLY_FIELDS.iter().chain(&DEPRECATED_FIELDS) {
         local.remove(*field);
         remote.remove(*field);
+    }
+
+    if guild_command {
+        for field in GLOBAL_ONLY_FIELDS {
+            local.remove(field);
+            remote.remove(field);
+        }
     }
 
     for field in LOCAL_ONLY_FIELDS {

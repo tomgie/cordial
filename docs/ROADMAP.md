@@ -176,13 +176,13 @@ Exit: event sequence tests pass (done). A recorded event log of 1 hour replays w
 - [x] Checks and cooldowns.
 - [x] Command sync: normalize, compare by `(type, name)`, plan (create, update, rename, delete, unchanged).
 - [x] Sync strategies: `Granular` (default), `Bulk`, `Auto`. Dry-run mode. Keep the Entry Point command.
-- [ ] Normalization tests with real responses from Discord (defaults, null versus absent, localizations). The tests use responses in the documented shape; a capture from Discord needs a bot token.
+- [x] Normalization tests with real responses from Discord (defaults, null versus absent, localizations). Live test: `live_sync` example. Fixtures: `crates/cordial-framework/tests/sync_fixtures.rs`. The live test found that Discord drops `contexts` from guild commands (fixed in 0.10.3).
 - [x] Response state tracking, auto-defer option, late-acknowledge warning.
 - [x] Component router with `custom_id` patterns.
 - [x] Collectors (event, component, modal) with timeouts.
 - [x] Interaction source: gateway or the endpoint crate.
 - [x] Graceful shutdown with session export.
-- [x] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app, HTTP interactions.
+- [x] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app, HTTP interactions. Live checks: `live_check`, `live_sync`.
 
 Exit: the examples run. (They build; a live run needs a bot token.) The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
 

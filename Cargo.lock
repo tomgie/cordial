@@ -418,7 +418,7 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "cordial"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "axum",
  "cordial-cache",
@@ -429,6 +429,7 @@ dependencies = [
  "cordial-macros",
  "cordial-model",
  "cordial-voice",
+ "ebur128",
  "serde_json",
  "tokio",
  "tracing",
@@ -437,7 +438,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-cache"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "cordial-model",
  "criterion",
@@ -450,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-endpoint"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "axum",
  "bytes",
@@ -465,7 +466,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-framework"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "cordial-cache",
  "cordial-endpoint",
@@ -486,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-gateway"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "cordial-gateway",
  "cordial-http",
@@ -505,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-http"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "bytes",
  "cordial-http",
@@ -524,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-macros"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "cordial-framework",
  "proc-macro-crate",
@@ -535,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-model"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "criterion",
  "serde",
@@ -544,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-voice"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "aes-gcm 0.10.3",
  "chacha20poly1305",
@@ -788,6 +789,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "dasp_frame"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2a3937f5fe2135702897535c8d4a5553f8b116f76c1529088797f2eee7c5cd6"
+dependencies = [
+ "dasp_sample",
+]
+
+[[package]]
+name = "dasp_sample"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
+
+[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -831,6 +847,18 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
+name = "ebur128"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4cc730f4c2c61221890fbec2ccc3dd645e93a5e83d67c4ccd3552d90f513149"
+dependencies = [
+ "bitflags 1.3.2",
+ "dasp_frame",
+ "dasp_sample",
+ "smallvec",
+]
 
 [[package]]
 name = "ecdsa"
@@ -1568,7 +1596,7 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "libdave-interop"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "cordial-model",
  "cordial-voice",
@@ -3509,7 +3537,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.11.3"
+version = "0.11.4"
 dependencies = [
  "serde_json",
 ]

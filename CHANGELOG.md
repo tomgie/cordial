@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.11.4
+
+### Added
+
+- Example `live_voice` measures loudness (EBU R128) with the `ebur128` crate: the short-term loudness of each person in each status line, and the integrated loudness and true peak at the end. The first measurement of a person in a call gave -22.0 LUFS.
+
 ## 0.11.3
 
 ### Added

@@ -38,6 +38,8 @@ cordial-framework = { workspace = true, optional = true }
 
 [dev-dependencies]
 axum.workspace = true
+# The live voice example measures loudness (EBU R128).
+ebur128 = "0.1"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "net"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

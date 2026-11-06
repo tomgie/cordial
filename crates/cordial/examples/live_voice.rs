@@ -12,8 +12,9 @@
 //! 2. Join that channel with a DAVE session. The call must use DAVE protocol version 1.
 //! 3. Play a test tone: three rising notes, then a pause, again and again.
 //! 4. Receive the audio of each person. Write a status line each 5 seconds with the number of
-//!    frames and the sound level, so that a person can speak and see the level change.
-//! 5. After the given time (default 120 seconds), leave the channel and write a summary.
+//!    frames, the peak level, and the short-term loudness (EBU R128, 3 s window).
+//! 5. After the given time (default 120 seconds), leave the channel and write a summary with
+//!    the integrated loudness and the true peak of each person, and of the test tone.
 //!
 //! The program fails when the call does not use DAVE, or when a DAVE error occurs.
 
@@ -27,6 +28,8 @@ use cordial::http::{Client, Token};
 use cordial::model::gateway::Intents;
 use cordial::model::gateway::event::{Event, GuildCreate};
 use cordial::model::id::{ChannelId, GuildId, UserId};
+use ebur128::{EbuR128, Mode};
+
 use cordial::voice::{
     CallConfig, DaveSession, E2eeSession, PcmSource, ShardHandles, Track, VoiceEvent, VoiceManager,
 };
@@ -91,7 +94,9 @@ async fn main() -> Result<(), BoxError> {
         tokio::time::sleep(Duration::from_millis(5)).await;
     };
     let call = join.await??;
-    call.play(Track::new(PcmSource::from_f32(test_tone(seconds))));
+    let tone = test_tone(seconds);
+    println!("test tone: {}", Loudness::of_samples(&tone).describe());
+    call.play(Track::new(PcmSource::from_f32(tone)));
 
     let mut report = Report::default();
     let end = Instant::now() + Duration::from_secs(seconds);
@@ -241,8 +246,59 @@ fn test_tone(seconds: u64) -> Vec<f32> {
     samples
 }
 
+/// A loudness meter (EBU R128): integrated and short-term loudness, and the true peak.
+struct Loudness {
+    meter: EbuR128,
+}
+
+impl Loudness {
+    fn new() -> Self {
+        let mode = Mode::I | Mode::S | Mode::TRUE_PEAK;
+        let meter = EbuR128::new(2, 48_000, mode).expect("a stereo meter at 48 kHz");
+        Self { meter }
+    }
+
+    /// Measures interleaved stereo samples in -1.0 to 1.0.
+    fn of_samples(samples: &[f32]) -> Self {
+        let mut loudness = Self::new();
+        loudness
+            .meter
+            .add_frames_f32(samples)
+            .expect("whole stereo frames");
+        loudness
+    }
+
+    fn add(&mut self, pcm: &[i16]) {
+        // A frame always has whole stereo pairs, so the meter accepts it.
+        let _ = self.meter.add_frames_i16(pcm);
+    }
+
+    fn short_term(&self) -> String {
+        lufs_text(self.meter.loudness_shortterm())
+    }
+
+    /// Gives the integrated loudness and the highest true peak of both channels.
+    fn describe(&self) -> String {
+        let true_peak = (0..2)
+            .filter_map(|channel| self.meter.true_peak(channel).ok())
+            .fold(0.0_f64, f64::max);
+        format!(
+            "integrated {}, true peak {:.1} dBTP",
+            lufs_text(self.meter.loudness_global()),
+            20.0 * true_peak.log10()
+        )
+    }
+}
+
+fn lufs_text(loudness: Result<f64, ebur128::Error>) -> String {
+    match loudness {
+        Ok(value) if value.is_finite() => format!("{value:.1} LUFS"),
+        Ok(_) => "silent".to_owned(),
+        Err(error) => format!("unknown ({error})"),
+    }
+}
+
 /// The received audio of one person.
-#[derive(Default)]
 struct Received {
     frames: u64,
     lost: u64,
@@ -250,6 +306,19 @@ struct Received {
     peak: i16,
     /// The highest absolute sample of the test.
     highest_peak: i16,
+    loudness: Loudness,
+}
+
+impl Default for Received {
+    fn default() -> Self {
+        Self {
+            frames: 0,
+            lost: 0,
+            peak: 0,
+            highest_peak: 0,
+            loudness: Loudness::new(),
+        }
+    }
 }
 
 /// The counts of the call.
@@ -292,6 +361,9 @@ impl Report {
                     .unwrap_or(0);
                 received.peak = received.peak.max(peak);
                 received.highest_peak = received.highest_peak.max(peak);
+                if let Some(pcm) = &data.pcm {
+                    received.loudness.add(pcm);
+                }
             }
             VoiceEvent::E2eeError(error) => {
                 println!("DAVE error: {error}");
@@ -326,10 +398,11 @@ impl Report {
         }
         for (sender, received) in &mut self.received {
             println!(
-                "status: {sender}: {} frames, {} lost, level {}",
+                "status: {sender}: {} frames, {} lost, level {}, short-term {}",
                 received.frames,
                 received.lost,
-                level_bar(received.peak)
+                level_bar(received.peak),
+                received.loudness.short_term()
             );
             received.peak = 0;
         }
@@ -342,8 +415,11 @@ impl Report {
         println!("  DAVE errors: {:?}", self.e2ee_errors);
         for (sender, received) in &self.received {
             println!(
-                "  {sender}: {} frames, {} lost, highest peak {}",
-                received.frames, received.lost, received.highest_peak
+                "  {sender}: {} frames, {} lost, highest peak {}, {}",
+                received.frames,
+                received.lost,
+                received.highest_peak,
+                received.loudness.describe()
             );
         }
     }

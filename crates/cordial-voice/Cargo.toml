@@ -25,10 +25,13 @@ aes-gcm.workspace = true
 chacha20poly1305 = "0.10"
 futures-util.workspace = true
 hmac.workspace = true
+getrandom.workspace = true
+hpke.workspace = true
 openmls.workspace = true
-openmls_basic_credential.workspace = true
-openmls_rust_crypto.workspace = true
+openmls_memory_storage.workspace = true
+openmls_traits.workspace = true
 opus = { version = "0.4", optional = true }
+p256.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

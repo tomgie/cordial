@@ -1,0 +1,18 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "config": {
+      "api_endpoint": "//discord.com/api",
+      "cdn_host": "cdn.discordapp.com",
+      "environment": "production"
+    },
+    "user": {
+      "avatar": null,
+      "discriminator": "1337",
+      "id": "53908232506183680",
+      "username": "Mason"
+    },
+    "v": 1
+  },
+  "evt": "READY"
+}

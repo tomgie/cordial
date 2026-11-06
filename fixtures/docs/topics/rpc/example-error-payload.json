@@ -1,0 +1,9 @@
+{
+  "cmd": "AUTHORIZE",
+  "data": {
+    "code": 4007,
+    "message": "No client id provided"
+  },
+  "evt": "ERROR",
+  "nonce": "5102b6f0-c769-4f37-8cca-25fb0ab22628"
+}

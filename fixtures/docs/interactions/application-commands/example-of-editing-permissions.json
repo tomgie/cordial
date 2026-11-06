@@ -1,0 +1,6 @@
+{
+  "default_member_permissions": "0",
+  "description": "A test of default permissions",
+  "name": "permissions_test",
+  "type": 1
+}

@@ -1,0 +1,14 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "average_ping": 13.37,
+    "hostname": "some-server.discord.gg",
+    "last_ping": 20,
+    "pings": [
+      20,
+      13.37
+    ],
+    "state": "VOICE_CONNECTED"
+  },
+  "evt": "VOICE_CONNECTION_STATUS"
+}

@@ -1,0 +1,18 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "mentionables_selected",
+          "required": true,
+          "type": 7
+        },
+        "label": "Who gets mentioned?",
+        "type": 18
+      }
+    ],
+    "custom_id": "mentionable_modal",
+    "title": "Unmentionables"
+  },
+  "type": 9
+}

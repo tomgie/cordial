@@ -1,0 +1,9 @@
+{
+  "allowed_mentions": {
+    "users": [
+      "123",
+      "456"
+    ]
+  },
+  "content": "<@123> Time for some memes 🤠"
+}

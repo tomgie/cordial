@@ -1,0 +1,54 @@
+{
+  "cmd": "GET_VOICE_SETTINGS",
+  "data": {
+    "automatic_gain_control": false,
+    "deaf": false,
+    "echo_cancellation": false,
+    "input": {
+      "available_devices": [
+        {
+          "id": "default",
+          "name": "Default"
+        },
+        {
+          "id": "Built-in Microphone",
+          "name": "Built-in Microphone"
+        }
+      ],
+      "device_id": "default",
+      "volume": 49.80392158031464
+    },
+    "mode": {
+      "auto_threshold": true,
+      "delay": 98.36065573770492,
+      "shortcut": [
+        {
+          "code": 12,
+          "name": "i",
+          "type": 0
+        }
+      ],
+      "threshold": -46.92622950819673,
+      "type": "VOICE_ACTIVITY"
+    },
+    "mute": false,
+    "noise_suppression": false,
+    "output": {
+      "available_devices": [
+        {
+          "id": "default",
+          "name": "Default"
+        },
+        {
+          "id": "Built-in Output",
+          "name": "Built-in Output"
+        }
+      ],
+      "device_id": "default",
+      "volume": 93.00000071525574
+    },
+    "qos": false,
+    "silence_warning": false
+  },
+  "nonce": "fa07c532-bb03-4f75-8b9a-397f5109afb6"
+}

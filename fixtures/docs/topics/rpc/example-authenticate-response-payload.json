@@ -1,0 +1,26 @@
+{
+  "cmd": "AUTHENTICATE",
+  "data": {
+    "application": {
+      "description": "test app description",
+      "icon": "d6b51c21c48482d5b64aa4832d92fe14",
+      "id": "192741864418312192",
+      "name": "test app",
+      "rpc_origins": [
+        "http://localhost:3344"
+      ]
+    },
+    "expires": "2017-06-29T19:09:52.361000+00:00",
+    "scopes": [
+      "rpc",
+      "identify"
+    ],
+    "user": {
+      "avatar": "b004ec1740a63ca06ae2e14c5cee11f3",
+      "discriminator": "7479",
+      "id": "190320984123768832",
+      "username": "test user"
+    }
+  },
+  "nonce": "5bb10a43-1fdc-4391-9512-0c8f4aa203d4"
+}

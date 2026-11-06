@@ -1,0 +1,7 @@
+{
+  "cmd": "SUBSCRIBE",
+  "data": {
+    "evt": "GUILD_STATUS"
+  },
+  "nonce": "be9a6de3-31d0-4767-a8e9-4818c5690015"
+}

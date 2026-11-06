@@ -1,0 +1,8 @@
+{
+  "d": {
+    "seq": 1337,
+    "session_id": "session_id_i_stored",
+    "token": "my_token"
+  },
+  "op": 6
+}

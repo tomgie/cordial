@@ -1,0 +1,33 @@
+{
+  "description": "Send a random adorable animal photo",
+  "name": "blep",
+  "options": [
+    {
+      "choices": [
+        {
+          "name": "Dog",
+          "value": "animal_dog"
+        },
+        {
+          "name": "Cat",
+          "value": "animal_cat"
+        },
+        {
+          "name": "Penguin",
+          "value": "animal_penguin"
+        }
+      ],
+      "description": "The type of animal",
+      "name": "animal",
+      "required": true,
+      "type": 3
+    },
+    {
+      "description": "Whether to show only baby animals",
+      "name": "only_smol",
+      "required": false,
+      "type": 5
+    }
+  ],
+  "type": 1
+}

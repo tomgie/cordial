@@ -1,0 +1,26 @@
+[package]
+name = "cordial-framework"
+description = "Event router, command system, and component router for Discord bots."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+categories.workspace = true
+keywords.workspace = true
+authors.workspace = true
+
+[features]
+default = []
+# Receive interactions over HTTP in place of the gateway.
+endpoint = ["dep:cordial-endpoint"]
+
+[dependencies]
+cordial-endpoint = { workspace = true, optional = true }
+cordial-model.workspace = true
+cordial-http.workspace = true
+cordial-gateway.workspace = true
+cordial-cache.workspace = true
+cordial-macros.workspace = true
+
+[lints]
+workspace = true

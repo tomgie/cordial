@@ -1,0 +1,40 @@
+{
+  "channel": {
+    "id": "165176875973476352",
+    "name": "illuminati",
+    "type": 0
+  },
+  "code": "0vCdhLbwjZZTWZLD",
+  "guild": {
+    "banner": null,
+    "description": "Very good description",
+    "features": [
+      "NEWS",
+      "DISCOVERABLE"
+    ],
+    "icon": null,
+    "id": "165176875973476352",
+    "name": "CS:GO Fraggers Only",
+    "nsfw_level": 0,
+    "premium_subscription_count": 5,
+    "splash": null,
+    "vanity_url_code": null,
+    "verification_level": 2
+  },
+  "inviter": {
+    "avatar": "deadbeef",
+    "discriminator": "7653",
+    "id": "115590097100865541",
+    "public_flags": 131328,
+    "username": "speed"
+  },
+  "target_type": 1,
+  "target_user": {
+    "avatar": "deadbeef",
+    "discriminator": "1234",
+    "id": "165176875973476352",
+    "public_flags": 64,
+    "username": "bob"
+  },
+  "type": 0
+}

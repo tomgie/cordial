@@ -1,0 +1,32 @@
+{
+  "components": [
+    {
+      "content": "Live webcam shots as of 18-04-2025 at 12:00 UTC",
+      "type": 10
+    },
+    {
+      "items": [
+        {
+          "description": "An aerial view looking down on older industrial complex buildings. The main building is white with many windows and pipes running up the walls.",
+          "media": {
+            "url": "https://livevideofeedconvertedtoimage/webcam1.webp"
+          }
+        },
+        {
+          "description": "An aerial view of old broken buildings. Nature has begun to take root in the rooftops. A portion of the middle building's roof has collapsed inward. In the distant haze you can make out a far away city.",
+          "media": {
+            "url": "https://livevideofeedconvertedtoimage/webcam2.webp"
+          }
+        },
+        {
+          "description": "A street view of a downtown city. Prominently in photo are skyscrapers and a domed building",
+          "media": {
+            "url": "https://livevideofeedconvertedtoimage/webcam3.webp"
+          }
+        }
+      ],
+      "type": 12
+    }
+  ],
+  "flags": 32768
+}

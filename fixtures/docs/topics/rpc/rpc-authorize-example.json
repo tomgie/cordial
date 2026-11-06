@@ -1,0 +1,11 @@
+{
+  "args": {
+    "client_id": "192741864418312192",
+    "scopes": [
+      "rpc",
+      "identify"
+    ]
+  },
+  "cmd": "AUTHORIZE",
+  "nonce": "f48f6176-4afb-4c03-b1b8-d960861f5216"
+}

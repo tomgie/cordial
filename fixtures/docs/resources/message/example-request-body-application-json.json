@@ -1,0 +1,10 @@
+{
+  "content": "Hello, World!",
+  "embeds": [
+    {
+      "description": "This is an embedded message.",
+      "title": "Hello, Embed!"
+    }
+  ],
+  "tts": false
+}

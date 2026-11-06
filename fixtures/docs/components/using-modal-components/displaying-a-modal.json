@@ -1,0 +1,56 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "bug_string_select",
+          "options": [
+            {
+              "description": "(best option)",
+              "emoji": {
+                "name": "🐜"
+              },
+              "label": "Ant",
+              "value": "ant"
+            },
+            {
+              "emoji": {
+                "name": "🦋"
+              },
+              "label": "Butterfly",
+              "value": "butterfly"
+            },
+            {
+              "emoji": {
+                "name": "🐛"
+              },
+              "label": "Caterpillar",
+              "value": "caterpillar"
+            }
+          ],
+          "placeholder": "Choose...",
+          "type": 3
+        },
+        "label": "What's your favorite bug?",
+        "type": 18
+      },
+      {
+        "component": {
+          "custom_id": "bug_explanation",
+          "max_length": 4000,
+          "min_length": 1000,
+          "placeholder": "Write your explanation here...",
+          "required": true,
+          "style": 2,
+          "type": 4
+        },
+        "description": "Please provide as much detail as possible!",
+        "label": "Why is it your favorite?",
+        "type": 18
+      }
+    ],
+    "custom_id": "bug_modal",
+    "title": "Bug Report"
+  },
+  "type": 9
+}

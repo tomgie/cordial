@@ -1,0 +1,15 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "user_select",
+          "placeholder": "Select a user",
+          "type": 5
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

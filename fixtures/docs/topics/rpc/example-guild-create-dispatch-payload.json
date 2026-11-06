@@ -1,0 +1,8 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "id": "199737254929767562",
+    "name": "Test Server"
+  },
+  "evt": "GUILD_CREATE"
+}

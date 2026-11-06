@@ -1,0 +1,26 @@
+{
+  "components": [
+    {
+      "content": "This is a message with v2 components",
+      "type": 10
+    },
+    {
+      "components": [
+        {
+          "custom_id": "click_me_1",
+          "label": "Click Me",
+          "style": 1,
+          "type": 2
+        },
+        {
+          "custom_id": "click_me_2",
+          "label": "Click Me Too",
+          "style": 2,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

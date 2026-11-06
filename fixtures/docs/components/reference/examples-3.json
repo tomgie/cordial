@@ -1,0 +1,41 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "favorite_bug",
+          "id": 2,
+          "options": [
+            {
+              "description": "(best option)",
+              "emoji": {
+                "name": "🐜"
+              },
+              "label": "Ant",
+              "value": "ant"
+            },
+            {
+              "emoji": {
+                "name": "🦋"
+              },
+              "label": "Butterfly",
+              "value": "butterfly"
+            },
+            {
+              "emoji": {
+                "name": "🐛"
+              },
+              "label": "Caterpillar",
+              "value": "caterpillar"
+            }
+          ],
+          "placeholder": "Favorite bug?",
+          "type": 3
+        }
+      ],
+      "id": 1,
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

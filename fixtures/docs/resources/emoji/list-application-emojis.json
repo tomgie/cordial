@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "animated": false,
+      "id": "41771983429993937",
+      "managed": false,
+      "name": "LUL",
+      "require_colons": true,
+      "roles": [],
+      "user": {
+        "avatar": "5500909a3274e1812beb4e8de6631111",
+        "discriminator": "0002",
+        "id": "96008815106887111",
+        "public_flags": 131328,
+        "username": "Luigi"
+      }
+    }
+  ]
+}

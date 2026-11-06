@@ -1,0 +1,17 @@
+[package]
+name = "cordial-voice"
+description = "Discord voice connections with DAVE end-to-end encryption."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+categories.workspace = true
+keywords.workspace = true
+authors.workspace = true
+
+[dependencies]
+cordial-model.workspace = true
+cordial-gateway.workspace = true
+
+[lints]
+workspace = true

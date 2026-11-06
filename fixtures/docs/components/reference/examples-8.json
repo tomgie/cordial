@@ -1,0 +1,17 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "role_ids",
+          "max_values": 3,
+          "min_values": 1,
+          "placeholder": "Which roles?",
+          "type": 6
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

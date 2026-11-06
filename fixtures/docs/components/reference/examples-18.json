@@ -1,0 +1,25 @@
+{
+  "components": [
+    {
+      "content": "# New game version released for testing!\nGrab the game here:",
+      "type": 10
+    },
+    {
+      "file": {
+        "url": "attachment://game.zip"
+      },
+      "type": 13
+    },
+    {
+      "content": "Latest manual artwork here:",
+      "type": 10
+    },
+    {
+      "file": {
+        "url": "attachment://manual.pdf"
+      },
+      "type": 13
+    }
+  ],
+  "flags": 32768
+}

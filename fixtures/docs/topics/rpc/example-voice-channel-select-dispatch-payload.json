@@ -1,0 +1,8 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "channel_id": "199737254929760257",
+    "guild_id": "199737254929760256"
+  },
+  "evt": "VOICE_CHANNEL_SELECT"
+}

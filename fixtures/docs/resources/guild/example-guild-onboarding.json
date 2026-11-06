@@ -1,0 +1,53 @@
+{
+  "default_channel_ids": [
+    "998678771706110023",
+    "998678693058719784",
+    "1070008122577518632",
+    "998678764340912138",
+    "998678704446263309",
+    "998678683592171602",
+    "998678699715067986"
+  ],
+  "enabled": true,
+  "guild_id": "960007075288915998",
+  "prompts": [
+    {
+      "id": "1067461047608422473",
+      "in_onboarding": true,
+      "options": [
+        {
+          "channel_ids": [
+            "962007075288916001"
+          ],
+          "description": "",
+          "emoji": {
+            "animated": false,
+            "id": "1070002302032826408",
+            "name": "chat"
+          },
+          "id": "1067461047608422476",
+          "role_ids": [],
+          "title": "Chat with Friends"
+        },
+        {
+          "channel_ids": [],
+          "description": "We have excellent teachers!",
+          "emoji": {
+            "animated": false,
+            "id": null,
+            "name": "😀"
+          },
+          "id": "1070004843541954678",
+          "role_ids": [
+            "982014491980083211"
+          ],
+          "title": "Get Gud"
+        }
+      ],
+      "required": false,
+      "single_select": false,
+      "title": "What do you want to do in this community?",
+      "type": 0
+    }
+  ]
+}

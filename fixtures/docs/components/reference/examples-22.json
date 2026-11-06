@@ -1,0 +1,45 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "class_radio",
+          "options": [
+            {
+              "description": "Strong and brave",
+              "label": "Warrior",
+              "value": "warrior"
+            },
+            {
+              "description": "Weak and squishy",
+              "label": "Rogue",
+              "value": "rogue"
+            },
+            {
+              "description": "Nerd",
+              "label": "Wizard",
+              "value": "wizard"
+            },
+            {
+              "description": "Annoys everyone",
+              "label": "Bard",
+              "value": "bard"
+            },
+            {
+              "description": "Actually a pretty cool option",
+              "label": "Witch Doctor",
+              "value": "witch_doctor"
+            }
+          ],
+          "type": 21
+        },
+        "description": "Your class detertmines the style of play for your character.",
+        "label": "Choose your class",
+        "type": 18
+      }
+    ],
+    "custom_id": "class_selection_modal",
+    "title": "Class Selection"
+  },
+  "type": 9
+}

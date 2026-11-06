@@ -1,0 +1,9 @@
+{
+  "components": [
+    {
+      "content": "This is a message using the Text Display component",
+      "type": 10
+    }
+  ],
+  "flags": 32768
+}

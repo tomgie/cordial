@@ -1,0 +1,16 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "entitlement": {
+      "application_id": "192741864418312192",
+      "deleted": true,
+      "ends_at": "2022-10-14T17:00:18.704163+00:00",
+      "id": "1019653849998299136",
+      "sku_id": "1019475255913222144",
+      "starts_at": "2022-09-14T17:00:18.704163+00:00",
+      "type": 8,
+      "user_id": "53908232506183680"
+    }
+  },
+  "evt": "ENTITLEMENT_DELETE"
+}

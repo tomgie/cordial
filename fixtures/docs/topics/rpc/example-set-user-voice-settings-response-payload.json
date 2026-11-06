@@ -1,0 +1,13 @@
+{
+  "cmd": "SET_USER_VOICE_SETTINGS",
+  "data": {
+    "mute": false,
+    "pan": {
+      "left": 1.0,
+      "right": 1.0
+    },
+    "user_id": "192731515703001088",
+    "volume": 120
+  },
+  "nonce": "eafc8152-2248-4478-9827-8457b7900cb4"
+}

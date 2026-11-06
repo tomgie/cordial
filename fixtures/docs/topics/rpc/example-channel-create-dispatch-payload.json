@@ -1,0 +1,9 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "id": "199737254929760257",
+    "name": "General",
+    "type": 0
+  },
+  "evt": "CHANNEL_CREATE"
+}

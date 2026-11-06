@@ -1,0 +1,14 @@
+{
+  "d": {
+    "heartbeat_interval": 1,
+    "ip": "127.0.0.1",
+    "modes": [
+      "xsalsa20_poly1305",
+      "xsalsa20_poly1305_suffix",
+      "xsalsa20_poly1305_lite"
+    ],
+    "port": 1234,
+    "ssrc": 1
+  },
+  "op": 2
+}

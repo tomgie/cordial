@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "click_yes",
+          "label": "Accept",
+          "style": 1,
+          "type": 2
+        },
+        {
+          "label": "Learn More",
+          "style": 5,
+          "type": 2,
+          "url": "http://watchanimeattheoffice.com/"
+        },
+        {
+          "custom_id": "click_no",
+          "label": "Decline",
+          "style": 4,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

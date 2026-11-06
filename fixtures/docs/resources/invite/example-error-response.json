@@ -1,0 +1,6 @@
+{
+  "target_users_file": [
+    "Line 5: invalid user ID - must be a valid Discord snowflake",
+    "Line 6: invalid user ID format"
+  ]
+}

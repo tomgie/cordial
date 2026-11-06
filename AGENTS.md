@@ -1,0 +1,46 @@
+## Language
+
+Use ASD-STE100 (Simplified Technical English) in all code, comments, commit messages, and responses.
+
+- Write short sentences. Use a maximum of 20 words in an instruction and 25 words in a description.
+- Give one instruction per sentence.
+- Use the active voice and the present tense.
+- Use the imperative mood for instructions ("Set the value", not "The value should be set").
+- Use one approved word for one meaning. Do not use synonyms for the same thing.
+- Do not use slang, idioms, or contractions.
+
+Use American English spelling in all text (color, behavior, initialize, center).
+
+## Comments
+
+- Write comments to explain why, not what. The code shows what it does.
+- Keep comments sparse. Add a comment only when the reason is not clear from the code.
+- Keep comments brief. Use one short sentence when possible.
+
+## Readability
+
+Write code and text that a new reader understands on the first read.
+
+- Put a blank line between the steps of a function: a check, a lookup, a change, a result.
+- Do not put a blank line between each statement. A group of lines that do one step stays together.
+- Put one statement on a line. Do not chain commands on one line when separate lines are clearer.
+- Give a value a name that says what it holds. Use a short name only in a small scope.
+- Move a deep nesting or a long function into named parts when each part has one clear job.
+- Use a list or a table for steps and for sets of values, not a long paragraph.
+- Keep each paragraph of text to one topic.
+
+## Versions
+
+One semantic version applies to all crates in the workspace.
+
+- Increase the version in the commit that makes the change.
+- Increase the patch number for a correction or an internal change.
+- Increase the minor number for a new feature.
+- Increase the minor number for a change that breaks the public API.
+- Keep the major number at 0 until the public release.
+- Change the version in each place below in the same commit.
+
+Places that hold the version (all in the root `Cargo.toml`):
+
+- `workspace.package.version`.
+- Each `cordial-*` entry in `workspace.dependencies` (the `=x.y.z` requirement).

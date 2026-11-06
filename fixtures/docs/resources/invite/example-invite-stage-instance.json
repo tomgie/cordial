@@ -1,0 +1,16 @@
+{
+  "members": [
+    {
+      "avatar": null,
+      "joined_at": "2015-04-26T06:26:56.936000+00:00",
+      "nick": "NOT API SUPPORT",
+      "pending": false,
+      "premium_since": null,
+      "roles": [],
+      "user": {}
+    }
+  ],
+  "participant_count": 200,
+  "speaker_count": 5,
+  "topic": "The debate is over: diet is better than regular"
+}

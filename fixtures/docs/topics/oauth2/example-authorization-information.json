@@ -1,0 +1,25 @@
+{
+  "application": {
+    "bot_public": true,
+    "bot_require_code_grant": false,
+    "description": "",
+    "hook": true,
+    "icon": "f03590d3eb764081d154a66340ea7d6d",
+    "id": "159799960412356608",
+    "name": "AIRHORN SOLUTIONS",
+    "verify_key": "c8cde6a3c8c6e49d86af3191287b3ce255872be1fff6dc285bdb420c06a2c3c8"
+  },
+  "expires": "2021-01-23T02:33:17.017000+00:00",
+  "scopes": [
+    "guilds.join",
+    "identify"
+  ],
+  "user": {
+    "avatar": "f749bb0cbeeb26ef21eca719337d20f1",
+    "discriminator": "0",
+    "global_name": "Discord",
+    "id": "268473310986240001",
+    "public_flags": 131072,
+    "username": "discord"
+  }
+}

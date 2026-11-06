@@ -1,0 +1,18 @@
+{
+  "cmd": "GET_CHANNELS",
+  "data": {
+    "channels": [
+      {
+        "id": "199737254929760256",
+        "name": "general",
+        "type": 0
+      },
+      {
+        "id": "199737254929760257",
+        "name": "General",
+        "type": 2
+      }
+    ]
+  },
+  "nonce": "0dee7bd4-8f62-4ecc-9e0f-1b1839a4fa93"
+}

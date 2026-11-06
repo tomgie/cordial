@@ -1,0 +1,8 @@
+{
+  "device_code": "<device code>",
+  "expires_in": 300,
+  "interval": 5,
+  "user_code": "<user code>",
+  "verification_uri": "https://discord.com/activate",
+  "verification_uri_complete": "https://discord.com/activate?user_code=<user code>"
+}

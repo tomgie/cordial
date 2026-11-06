@@ -1,0 +1,10 @@
+{
+  "account": {
+    "id": "1234567",
+    "name": "twitchusername"
+  },
+  "application_id": "94651234501213162",
+  "id": "33590653072239123",
+  "name": "A Name",
+  "type": "twitch"
+}

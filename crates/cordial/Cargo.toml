@@ -1,0 +1,37 @@
+[package]
+name = "cordial"
+description = "A full-featured library for Discord bots: HTTP, gateway, cache, interactions, and voice."
+readme = "../../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+categories.workspace = true
+keywords.workspace = true
+authors.workspace = true
+
+[features]
+default = ["http", "gateway", "cache", "framework", "macros"]
+http = ["dep:cordial-http"]
+gateway = ["http", "dep:cordial-gateway"]
+cache = ["dep:cordial-cache"]
+framework = ["http", "gateway", "cache", "dep:cordial-framework"]
+macros = ["dep:cordial-macros"]
+endpoint = ["dep:cordial-endpoint", "cordial-framework?/endpoint"]
+voice = ["gateway", "dep:cordial-voice"]
+
+[dependencies]
+cordial-model.workspace = true
+cordial-http = { workspace = true, optional = true }
+cordial-gateway = { workspace = true, optional = true }
+cordial-cache = { workspace = true, optional = true }
+cordial-endpoint = { workspace = true, optional = true }
+cordial-voice = { workspace = true, optional = true }
+cordial-macros = { workspace = true, optional = true }
+cordial-framework = { workspace = true, optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lints]
+workspace = true

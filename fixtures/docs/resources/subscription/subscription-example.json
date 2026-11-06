@@ -1,0 +1,13 @@
+{
+  "canceled_at": null,
+  "current_period_end": "2024-09-27T19:48:44.406602+00:00",
+  "current_period_start": "2024-08-27T19:48:44.406602+00:00",
+  "entitlement_ids": [],
+  "id": "1278078770116427839",
+  "renewal_sku_ids": null,
+  "sku_ids": [
+    "1158857122189168803"
+  ],
+  "status": 0,
+  "user_id": "1088605110638227537"
+}

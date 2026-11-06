@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "accessory": {
+        "media": {
+          "url": "https://websitewithopensourceimages/gamepreview.webp"
+        },
+        "type": 11
+      },
+      "components": [
+        {
+          "content": "# Real Game v7.3",
+          "type": 10
+        },
+        {
+          "content": "Hope you're excited, the update is finally here! Here are some of the changes:\n- Fixed a bug where certain treasure chests wouldn't open properly\n- Improved server stability during peak hours\n- Added a new type of gravity that will randomly apply when the moon is visible in-game\n- Every third thursday the furniture will scream your darkest secrets to nearby npcs",
+          "type": 10
+        },
+        {
+          "content": "-# That last one wasn't real, but don't use voice chat near furniture just in case...",
+          "type": 10
+        }
+      ],
+      "type": 9
+    }
+  ],
+  "flags": 32768
+}

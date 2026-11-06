@@ -1,0 +1,26 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "activity": {
+      "application_id": "192741864418312192",
+      "name": "My Game",
+      "party": {
+        "id": "party1234",
+        "size": [
+          2,
+          5
+        ]
+      }
+    },
+    "channel_id": "199737254929760256",
+    "message_id": "199743874640379904",
+    "type": 1,
+    "user": {
+      "avatar": "a_bab14f271d565501444b2ca3be944b25",
+      "discriminator": "1337",
+      "id": "53908232506183680",
+      "username": "Mason"
+    }
+  },
+  "evt": "ACTIVITY_INVITE"
+}

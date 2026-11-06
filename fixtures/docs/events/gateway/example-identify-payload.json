@@ -1,0 +1,12 @@
+{
+  "d": {
+    "intents": 513,
+    "properties": {
+      "browser": "my_library",
+      "device": "my_library",
+      "os": "linux"
+    },
+    "token": "my_token"
+  },
+  "op": 2
+}

@@ -1,0 +1,10 @@
+{
+  "identities": [
+    {
+      "provider_id": "<provider_id>",
+      "provider_issued_user_id": "<provider_issued_user_id>",
+      "provider_type": "<provider_type>",
+      "user_id": "<user_id>"
+    }
+  ]
+}

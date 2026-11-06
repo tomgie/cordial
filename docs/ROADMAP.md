@@ -1,0 +1,305 @@
+# Roadmap
+
+Status: draft 1, 2026-11-05.
+
+This roadmap lists all the work for a full bot library, in phases. Each phase has deliverables and exit criteria.
+The structure is in [ARCHITECTURE.md](ARCHITECTURE.md). The facts are in [research/](research/).
+Mark an item `[x]` in the same commit that completes it.
+
+## Phase order
+
+```text
+P0 Foundation
+ |
+P1 Model core
+ |
+P2 HTTP core ------------------------------+
+ |                                         |
+P3 Gateway ------------+                   |
+ |                     |                   |
+P4 Interactions        P8 Voice (parallel) P7 Full HTTP coverage (parallel, after P2)
+ |                     |                   |
+P5 Cache               |                   |
+ |                     |                   |
+P6 Framework + macros  |                   |
+ |                     |                   |
+ +---------------------+-------------------+
+ |
+P9 Hardening and release
+```
+
+- P1 to P3 are the critical path. Everything else depends on them.
+- P7 (the long list of endpoints) can run in parallel after P2. Its work is regular and repetitive.
+- P8 (voice) can start after P3. It is the phase with the highest risk.
+
+## P0: Foundation
+
+Deliverables:
+
+- [x] Cargo workspace with the crates in ARCHITECTURE section 3 (empty stubs).
+- [x] Rust edition 2024. `rust-toolchain.toml`. MSRV in `Cargo.toml`.
+- [x] Lints: `clippy` (pedantic subset), `rustfmt.toml`, `missing_docs = "deny"`, `unsafe_code = "forbid"` (FFI crates override it later).
+- [x] CI: build, test, clippy, fmt, docs, MSRV check, feature combinations, `wasm32` model check, `cargo deny`, on Windows, Linux, and macOS.
+- [x] License files. `README.md`. `CONTRIBUTING.md`.
+- [x] `xtask` crate stub.
+- [x] Discord docs examples as JSON fixtures under `fixtures/docs` (`cargo xtask fixtures`).
+
+Exit: CI is green on an empty workspace.
+
+## P1: Model core
+
+Base types:
+
+- [ ] `Id<T>`, markers, snowflake time helpers, string and integer decode.
+- [ ] `Timestamp` (ISO 8601).
+- [ ] `discord_enum!` macro (integer and string enums with `Unknown`).
+- [ ] Bit flags type with 64 bits and unknown-bit preservation.
+- [ ] `Nullable<T>`, `Patch<T>`, null-means-true deserializer.
+- [ ] `Permissions` (bits 0..52) and the permission calculator with implicit rules.
+- [ ] `Color`, `ImageHash` (with the animated `a_` prefix), `Locale`.
+- [ ] CDN URL builder for each asset path in research/02-http.md section 6.
+- [ ] Message formatting helpers (mentions, timestamps with styles, emoji, `<@$GAME_ID>`).
+
+Objects (see research/05-resources.md):
+
+- [ ] User, avatar decoration, collectibles, primary guild.
+- [ ] Guild, unavailable guild, guild preview, widget, welcome screen, onboarding, integration, ban, incidents data.
+- [ ] Member, partial member, member flags.
+- [ ] Role, role tags, role colors, partial role.
+- [ ] Channel (all 13 types), overwrites, thread metadata, thread member, forum tags, obfuscated flag.
+- [ ] Message, message types, flags, reference, snapshot, interaction metadata (union), reactions, activity, call, role subscription data, shared client theme.
+- [ ] Embed (with all flags), attachment, attachment request.
+- [ ] Emoji, sticker, sticker pack, soundboard sound.
+- [ ] Poll, poll request, poll results.
+- [ ] Invite, invite metadata, target-user job status.
+- [ ] Scheduled event, recurrence rule, event user.
+- [ ] Auto moderation rule, trigger metadata, actions.
+- [ ] Audit log, entry, change (typed accessors), optional info, all 71 action types.
+- [ ] Webhook, stage instance, guild template, voice state, voice region.
+- [ ] Application, application flags (with `flags_new`), install params, team.
+- [ ] SKU, entitlement, subscription.
+- [ ] Lobby, lobby member.
+
+Exit: all docs examples decode and encode back without loss. Unknown values survive a round trip.
+
+## P2: HTTP core
+
+- [ ] `Token` type (redacted, zeroed on drop).
+- [ ] `Endpoint` trait, `Route`, major parameter, `IntoFuture` request pattern.
+- [ ] `Transport` trait and the `reqwest` implementation. Fake transport for tests.
+- [ ] `User-Agent`, `Authorization`, `X-Audit-Log-Reason` (URL-encoded).
+- [ ] Request bodies: JSON, form, multipart with `payload_json` and `files[n]`.
+- [ ] Error decode: status, `JsonErrorCode` (245 codes), nested field errors.
+- [ ] Rate limiter: route keys, bucket discovery, temporary buckets, global limiter, 429 scopes, FIFO queues, idle bucket removal.
+- [ ] Invalid-request budget tracker. Token invalidation on 401.
+- [ ] Rate-limit JSON error codes as typed errors (20016, 20028, 20029, 30046, 40062, 110000).
+- [ ] Retry policy (idempotent methods, `enforce_nonce`).
+- [ ] Client-side validation framework (ARCHITECTURE section 5.4).
+- [ ] First endpoints: Get Gateway, Get Gateway Bot, Get Current User, Get Channel, Create Message (with files), Edit Message, Delete Message, Get Messages.
+- [ ] `xtask spec-check` first version: compare routes with the OpenAPI specification.
+
+Exit: a test bot sends a message with an attachment. Rate-limit tests pass for all 429 scopes.
+
+## P3: Gateway
+
+- [ ] Gateway payload types: opcodes 0..11, 31, 43. Identify (with `capabilities`), Resume, Presence, Voice State, Request Guild Members, Request Soundboard Sounds, Request Channel Info.
+- [ ] `Intents` (bits 0..25) and the event-to-intent table.
+- [ ] All dispatch event structs and the `Event` enum (see research/01-gateway.md section 7). Include RATE_LIMITED, CHANNEL_INFO, SOUNDBOARD_SOUNDS, VOICE_CHANNEL_STATUS_UPDATE, VOICE_CHANNEL_START_TIME_UPDATE.
+- [ ] `EventType` flags and two-step decode with an event filter.
+- [ ] Sans-IO `ShardCore`: Hello, Identify, heartbeat with jitter, ACK tracking, zombie detection, Resume, op 7, op 9, all close codes.
+- [ ] Shard driver with `tokio-tungstenite`.
+- [ ] `zlib-stream` decompression. `zstd-stream` behind a feature.
+- [ ] Send limiter (120 per 60 s, heartbeat reserve), 4096-byte check.
+- [ ] Op 8 limit (1 all-members request per guild per 30 s) and RATE_LIMITED handling.
+- [ ] Member chunk collector: `request_members(...)` gives a stream of chunks, matched by `nonce`.
+- [ ] `ShardManager`, `IdentifyQueue` trait, `LocalQueue`, session start limit guard.
+- [ ] Session export and import for resume after a process restart.
+- [ ] Channel obfuscation: handle the flag. Test with `capabilities: 1<<15`.
+- [ ] Mock gateway server for driver tests.
+
+Exit: a test bot with 4 shards runs for 24 hours on a test guild. It resumes after forced disconnects. No event is lost (sequence check).
+
+## P4: Interactions
+
+Model:
+
+- [ ] Interaction object, types, contexts, integration types, `authorizing_integration_owners`.
+- [ ] Command data, resolved data, options (all 11 types), autocomplete focus.
+- [ ] Callback types 1..12 and response bodies. Callback response object (`with_response`).
+- [ ] Components: all 20 types (1..14, 17, 18, 19, 21, 22, 23) with `Unknown`. Unfurled media item, content scan flags.
+- [ ] Modal submit data shapes (Label, Text Display, all inputs).
+- [ ] Application command object, option object, choices, localizations, permissions.
+
+HTTP:
+
+- [ ] Interaction callback, original response (get, edit, delete), follow-ups (create, get, edit, delete).
+- [ ] Application command endpoints (global and guild, bulk overwrite) and permission endpoints.
+
+Builders and validation:
+
+- [ ] Message builder (V1 and V2), embed builder, component builders, modal builder, command builder.
+- [ ] Limits: 40 components, flag rules for IS_COMPONENTS_V2, 5 action rows, modal 1..5 children, command 8000 characters, name regex.
+
+Endpoint crate:
+
+- [ ] Ed25519 verification, timestamp age check.
+- [ ] PING/PONG, inline reply, 202 deferral.
+- [ ] Webhook events: envelope, PING (204), all event types.
+- [ ] `axum` and `hyper` adapters.
+
+Exit: one example bot answers commands over the gateway. A second example answers the same commands over HTTP.
+
+## P5: Cache
+
+- [ ] Resource selection and the required-event set.
+- [ ] Compact cached types. Shared users.
+- [ ] Update logic for every event that changes state. Return the previous value.
+- [ ] GUILD_CREATE fill, GUILD_DELETE (outage versus removal), unavailable guilds.
+- [ ] Obfuscated channels.
+- [ ] Optional message ring buffer.
+- [ ] Permission helpers on the cache.
+- [ ] Memory benchmark: bytes per guild, member, and channel.
+
+Exit: event sequence tests pass. A recorded event log of 1 hour replays without a panic.
+
+## P6: Framework and macros
+
+- [ ] `Bot` builder, `Context<S>`, typed state.
+- [ ] Event router with `on::<E>`, intent computation, privileged-intent warnings.
+- [ ] Task model: one task per event, optional ordered mode per guild, panic isolation, error hook.
+- [ ] `#[derive(Command)]`, `#[derive(CommandGroup)]`, `#[derive(Choice)]`, `#[derive(Modal)]`.
+- [ ] Option types: primitives, resolved users, members, roles, channels, attachments, mentionables.
+- [ ] Autocomplete handlers.
+- [ ] Localization (`Localizer` trait).
+- [ ] Checks and cooldowns.
+- [ ] Command sync: normalize, compare by `(type, name)`, plan (create, update, rename, delete, unchanged).
+- [ ] Sync strategies: `Granular` (default), `Bulk`, `Auto`. Dry-run mode. Keep the Entry Point command.
+- [ ] Normalization tests with real responses from Discord (defaults, null versus absent, localizations).
+- [ ] Response state tracking, auto-defer option, late-acknowledge warning.
+- [ ] Component router with `custom_id` patterns.
+- [ ] Collectors (message, reaction, component, modal) with timeouts.
+- [ ] Interaction source: gateway or the endpoint crate.
+- [ ] Graceful shutdown with session export.
+- [ ] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app.
+
+Exit: the examples run. The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
+
+## P7: Full HTTP coverage
+
+All 245 operations in [research/endpoints.txt](research/endpoints.txt). Groups:
+
+- [ ] Application (3), application role connection metadata (2), application identity profile (5).
+- [ ] Audit log (1).
+- [ ] Auto moderation (5).
+- [ ] Channel (26): with permission endpoints, voice status, threads, followers, typing, group DM recipients.
+- [ ] Message (20): with search, new pin routes, reactions, bulk delete, crosspost. Old pin routes marked deprecated.
+- [ ] Poll (2).
+- [ ] Emoji (10): guild and application emojis.
+- [ ] Entitlement (5), SKU (1), subscription (2).
+- [ ] Guild (47): members, bans, bulk ban, roles, role member counts, permission endpoints, prune, widget, onboarding, welcome screen, incident actions, vanity URL.
+- [ ] Guild scheduled event (6).
+- [ ] Guild template (6).
+- [ ] Invite (9): with target users (CSV upload and download) and job status.
+- [ ] Lobby (16).
+- [ ] Soundboard (7).
+- [ ] Stage instance (4).
+- [ ] Sticker (8).
+- [ ] User (12): with the `shard` parameter on Get Current User Guilds for large bots.
+- [ ] Voice (5).
+- [ ] Webhook (15): execute with `wait`, `thread_id`, `with_components`; Slack and GitHub compatible.
+- [ ] OAuth2: authorization code (with PKCE), refresh, revoke, client credentials, bot and advanced bot authorization URLs, `iss` check, `GET /oauth2/@me`.
+- [ ] Pagination helpers: streams over messages, members, bans, audit log, entitlements, archived threads, reactions, pins.
+- [ ] `xtask spec-check` reports 0 missing endpoints.
+
+Exit: the coverage report is complete. Each endpoint has at least one test with the fake transport.
+
+## P8: Voice
+
+Transport:
+
+- [ ] Voice payload types (ops 0..13, 21..31). Close codes.
+- [ ] Sans-IO voice core: Hello, Identify, Ready, Select Protocol, Session Description, heartbeat v8 with `seq_ack`, Resume, buffered resume.
+- [ ] Join and leave through the gateway (op 4, VOICE_STATE_UPDATE, VOICE_SERVER_UPDATE). Null endpoint handling. Channel moves.
+- [ ] UDP: IP discovery, RTP header, keepalive filter, RTCP filter.
+- [ ] AEAD modes: `aead_aes256_gcm_rtpsize`, `aead_xchacha20_poly1305_rtpsize`. Test vectors.
+
+DAVE:
+
+- [ ] MLS group on `openmls`, ciphersuite 2, basic credentials, external sender.
+- [ ] Binary frame codec (TLS presentation language, MLS varints).
+- [ ] Key package, proposals (append and revoke), commit and welcome, announce commit, welcome.
+- [ ] Transitions: prepare, execute, ready, prepare epoch, invalid commit/welcome recovery.
+- [ ] Per-sender hash ratchet, generations, nonce wrap, 10 s retention of old keys.
+- [ ] Frame encryption and decryption: truncated tag, ULEB128 nonce, unencrypted ranges, supplemental size, `0xFAFA` marker, silence passthrough, replay rejection.
+- [ ] Interoperability tests against `libdave`.
+- [ ] Test in a real voice channel with Discord clients.
+
+Audio:
+
+- [ ] Opus encode and decode through `libopus`.
+- [ ] Send clock (20 ms), speaking flags, silence frames.
+- [ ] Inputs: PCM, Ogg Opus passthrough, `symphonia` decode, process input.
+- [ ] Mixer: many tracks, volume, pause, seek where possible, queue.
+- [ ] Receive: SSRC-to-user map (ops 5, 11, 13), jitter buffer, loss concealment, PCM events.
+- [ ] Soundboard helper. Stage helpers (suppress, request to speak). Voice channel status.
+
+Exit: a music example plays a file in a DAVE call for 1 hour with Discord clients that listen. A recorder example saves each speaker to a separate file.
+
+## P9: Hardening and release
+
+- [ ] Fuzz targets for all decoders (gateway, HTTP responses, voice packets, DAVE frames).
+- [ ] Benchmarks: event decode rate, cache memory, rate limiter overhead.
+- [ ] Soak test: 1000+ guilds on a test application, or a recorded large-bot event log.
+- [ ] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
+- [ ] Rustdoc for every public item, with an example on each main type.
+- [ ] Public API review: names, `#[non_exhaustive]`, sealed traits, error types.
+- [ ] Security review: token handling, signature verification, input limits.
+- [ ] Release process: changelog, version bump in all crates, publish order.
+
+Exit: version `1.0.0` criteria are met (see below).
+
+## Version 1.0 criteria
+
+1. All P0..P9 items are done.
+2. `spec-check` reports full endpoint coverage.
+3. No known panic on malformed input.
+4. The public API has been stable for two minor releases.
+5. Each item in "Known API changes" below is handled.
+
+## Known API changes to track
+
+| Date | Change | Phase |
+|---|---|---|
+| 2026-11-16 | Channel obfuscation becomes mandatory. `GET /guilds/{id}/channels` omits hidden channels. | P1, P3, P5 |
+| Future API version | `message_reference.type` required | P1 |
+| Future API version | Start Thread without Message `type` required | P7 |
+| Future API version | `enforce_nonce` is the default | P2 |
+| No date | Old pin routes, role `color`, message `interaction`, `dm_permission`, PREMIUM_REQUIRED, Action Row in modals | Mark as deprecated |
+
+Process:
+
+- Check the Discord change log each week. The source is `developers/change-log.mdx` in `discord/discord-api-docs`.
+- Run `xtask spec-check` in CI each week. A new difference opens an issue.
+
+## Risks
+
+| Risk | Effect | Mitigation |
+|---|---|---|
+| DAVE complexity | Voice is late or does not work | Start P8 early in parallel. Test against `libdave`. Keep a `DaveSession` trait for an FFI fallback. |
+| API drift | Silent breaks | `Unknown` variants, lenient decode, weekly `spec-check`, change log watch. |
+| Size of the endpoint list | Slow P7 | One `Endpoint` type per operation. A generator in `xtask` makes stubs from the specification. A person reviews and documents each one. |
+| Rate-limit errors | Cloudflare ban of the IP | Strong tests with scripted 429 sequences. Invalid-request budget tracker. |
+| Docs are not consistent | Wrong behavior | Open points in each research file. Live tests decide. |
+| Privileged intent policy | Users cannot get intents | Document the policy. Make features work without privileged intents where possible. |
+
+## Open questions from the research
+
+These need a live test or a decision:
+
+- Wait time before identify after op 9 with `d = false` (plan: 1..5 s at random).
+- Per-opcode limits for gateway ops 31 and 43.
+- Maximum attachments per message (plan: no client-side limit, rely on the server error).
+- Text Display character limit in Components V2.
+- Whether a bulk command overwrite fails when it omits the Entry Point command.
+- Byte order of the DAVE truncated nonce in the GCM nonce.
+- Whether JSON and binary voice messages share one sequence counter.

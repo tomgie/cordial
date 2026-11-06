@@ -1,0 +1,8 @@
+{
+  "args": {
+    "guild_id": "199737254929760256"
+  },
+  "cmd": "UNSUBSCRIBE",
+  "evt": "GUILD_STATUS",
+  "nonce": "647d814a-4cf8-4fbb-948f-898aad24f55b"
+}

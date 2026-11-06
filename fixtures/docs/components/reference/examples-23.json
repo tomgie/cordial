@@ -1,0 +1,41 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "event_checkbox",
+          "options": [
+            {
+              "label": "March 4th",
+              "value": "march-4"
+            },
+            {
+              "label": "March 5th",
+              "value": "march-5"
+            },
+            {
+              "description": "I know this is a Saturday and is tough",
+              "label": "March 7th",
+              "value": "march-7"
+            },
+            {
+              "label": "March 9th",
+              "value": "march-9"
+            },
+            {
+              "label": "March 10th",
+              "value": "march-10"
+            }
+          ],
+          "type": 22
+        },
+        "description": "Choose all of the days you're able to meet up.",
+        "label": "Which days are you free?",
+        "type": 18
+      }
+    ],
+    "custom_id": "day_selection_modal",
+    "title": "Study Days"
+  },
+  "type": 9
+}

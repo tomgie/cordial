@@ -1,0 +1,12 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "user": {
+      "avatar": "a_bab14f271d565501444b2ca3be944b25",
+      "discriminator": "1337",
+      "id": "53908232506183680",
+      "username": "Mason"
+    }
+  },
+  "evt": "ACTIVITY_JOIN_REQUEST"
+}

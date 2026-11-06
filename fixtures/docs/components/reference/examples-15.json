@@ -1,0 +1,34 @@
+{
+  "data": {
+    "components": [
+      {
+        "content": "This action will move the selected user to the selected voice channel and take away all their permissions **for 1 hour**.",
+        "type": 10
+      },
+      {
+        "component": {
+          "custom_id": "user_selected",
+          "required": true,
+          "type": 5
+        },
+        "label": "Choose a user",
+        "type": 18
+      },
+      {
+        "component": {
+          "channel_types": [
+            2
+          ],
+          "custom_id": "channel_selected",
+          "required": true,
+          "type": 8
+        },
+        "label": "Where should they be sent?",
+        "type": 18
+      }
+    ],
+    "custom_id": "jail_modal",
+    "title": "Jail"
+  },
+  "type": 9
+}

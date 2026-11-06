@@ -1,0 +1,27 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "mute": false,
+    "nick": "test user 2",
+    "pan": {
+      "left": 1.0,
+      "right": 1.0
+    },
+    "user": {
+      "avatar": "b004ec1740a63ca06ae2e14c5cee11f3",
+      "bot": false,
+      "discriminator": "7479",
+      "id": "190320984123768832",
+      "username": "test 2"
+    },
+    "voice_state": {
+      "deaf": false,
+      "mute": false,
+      "self_deaf": false,
+      "self_mute": false,
+      "suppress": false
+    },
+    "volume": 110
+  },
+  "evt": "VOICE_STATE_CREATE"
+}

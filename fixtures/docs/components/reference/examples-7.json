@@ -1,0 +1,19 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "user_selected",
+          "max_values": 5,
+          "required": true,
+          "type": 5
+        },
+        "label": "Choose your users",
+        "type": 18
+      }
+    ],
+    "custom_id": "user_modal",
+    "title": "User Chooser"
+  },
+  "type": 9
+}

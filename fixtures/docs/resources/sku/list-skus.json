@@ -1,0 +1,32 @@
+[
+  {
+    "access_type": 1,
+    "application_id": "788708323867885999",
+    "dependent_sku_id": null,
+    "features": [],
+    "flags": 128,
+    "id": "1088510053843210999",
+    "manifest_labels": null,
+    "name": "Test Premium",
+    "premium": false,
+    "release_date": null,
+    "show_age_gate": false,
+    "slug": "test-premium",
+    "type": 6
+  },
+  {
+    "access_type": 1,
+    "application_id": "788708323867885999",
+    "dependent_sku_id": null,
+    "features": [],
+    "flags": 128,
+    "id": "1088510058284990888",
+    "manifest_labels": null,
+    "name": "Test Premium",
+    "premium": false,
+    "release_date": null,
+    "show_age_gate": false,
+    "slug": "test-premium",
+    "type": 5
+  }
+]

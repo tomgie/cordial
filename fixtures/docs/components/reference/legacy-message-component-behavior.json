@@ -1,0 +1,16 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "click_me_1",
+          "label": "Click Me",
+          "style": 1,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "content": "This is a message with legacy components"
+}

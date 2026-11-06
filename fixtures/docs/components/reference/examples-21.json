@@ -1,0 +1,21 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "file_upload",
+          "max_values": 10,
+          "min_values": 1,
+          "required": true,
+          "type": 19
+        },
+        "description": "Please upload a screenshot or other image that shows the bug you encountered.",
+        "label": "File Upload",
+        "type": 18
+      }
+    ],
+    "custom_id": "bug_submit_modal",
+    "title": "Bug Submission"
+  },
+  "type": 9
+}

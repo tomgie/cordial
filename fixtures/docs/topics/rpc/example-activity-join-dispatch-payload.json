@@ -1,0 +1,7 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "secret": "025ed05c71f639de8bfaa0d679d7c94b2fdce12f"
+  },
+  "evt": "ACTIVITY_JOIN"
+}

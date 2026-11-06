@@ -1,0 +1,12 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "guild": {
+      "icon_url": null,
+      "id": "199737254929760256",
+      "name": "test"
+    },
+    "online": 0
+  },
+  "evt": "GUILD_STATUS"
+}

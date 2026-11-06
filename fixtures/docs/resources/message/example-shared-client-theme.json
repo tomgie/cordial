@@ -1,0 +1,14 @@
+{
+  "shared_client_theme": {
+    "base_mix": 58,
+    "base_theme": 1,
+    "colors": [
+      "5865F2",
+      "7258F2",
+      "9858F2",
+      "BE58F2",
+      "E558F2"
+    ],
+    "gradient_angle": 0
+  }
+}

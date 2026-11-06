@@ -1,0 +1,18 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "channel_types": [
+            0
+          ],
+          "custom_id": "notification_channel",
+          "placeholder": "Which text channel?",
+          "type": 8
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

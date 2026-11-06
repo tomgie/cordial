@@ -1,0 +1,21 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "presence": {
+      "activity": null,
+      "status": "online"
+    },
+    "type": 1,
+    "user": {
+      "avatar": "b004ec1740a63ca06ae2e14c5cee11f3",
+      "bot": false,
+      "discriminator": "0",
+      "flags": 0,
+      "global_name": "test user 2",
+      "id": "190320984123768832",
+      "premium_type": 0,
+      "username": "test user 2"
+    }
+  },
+  "evt": "RELATIONSHIP_UPDATE"
+}

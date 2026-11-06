@@ -1,0 +1,17 @@
+{
+  "data": {
+    "id": "816437322781949972",
+    "name": "airhorn",
+    "options": [
+      {
+        "focused": true,
+        "name": "variant",
+        "type": 3,
+        "value": "data a user is typ"
+      }
+    ],
+    "type": 1,
+    "version": "847194950382780532"
+  },
+  "type": 4
+}

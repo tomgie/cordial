@@ -1,0 +1,44 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "favorite_bug",
+          "id": 2,
+          "options": [
+            {
+              "description": "(best option)",
+              "emoji": {
+                "name": "🐜"
+              },
+              "label": "Ant",
+              "value": "ant"
+            },
+            {
+              "emoji": {
+                "name": "🦋"
+              },
+              "label": "Butterfly",
+              "value": "butterfly"
+            },
+            {
+              "emoji": {
+                "name": "🐛"
+              },
+              "label": "Caterpillar",
+              "value": "caterpillar"
+            }
+          ],
+          "placeholder": "Ants are the best",
+          "type": 3
+        },
+        "id": 1,
+        "label": "Favorite bug?",
+        "type": 18
+      }
+    ],
+    "custom_id": "bug_modal",
+    "title": "Bug Survey"
+  },
+  "type": 9
+}

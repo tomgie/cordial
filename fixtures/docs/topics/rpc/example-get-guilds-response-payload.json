@@ -1,0 +1,12 @@
+{
+  "cmd": "GET_GUILDS",
+  "data": {
+    "guilds": [
+      {
+        "id": "199737254929760256",
+        "name": "test"
+      }
+    ]
+  },
+  "nonce": "e16fcbed-8bfa-4fd4-ba09-73b72e809833"
+}

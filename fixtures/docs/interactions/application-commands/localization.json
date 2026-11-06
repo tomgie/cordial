@@ -1,0 +1,25 @@
+{
+  "description": "Wish a friend a happy birthday",
+  "description_localizations": {
+    "zh-CN": "祝你朋友生日快乐"
+  },
+  "name": "birthday",
+  "name_localizations": {
+    "el": "γενέθλια",
+    "zh-CN": "生日"
+  },
+  "options": [
+    {
+      "description": "Your friend's age",
+      "description_localizations": {
+        "zh-CN": "你朋友的岁数"
+      },
+      "name": "age",
+      "name_localizations": {
+        "zh-CN": "岁数"
+      },
+      "type": 4
+    }
+  ],
+  "type": 1
+}

@@ -1,0 +1,70 @@
+{
+  "code": "hgM48av5Q69A",
+  "created_at": "2020-04-02T21:10:38+00:00",
+  "creator": {
+    "avatar": "79b0d9f8c340f2d43e1f78b09f175b62",
+    "discriminator": "0001",
+    "id": "132837293881950208",
+    "public_flags": 129,
+    "username": "hoges"
+  },
+  "creator_id": "132837293881950208",
+  "description": "",
+  "is_dirty": null,
+  "name": "Friends & Family",
+  "serialized_source_guild": {
+    "afk_channel_id": null,
+    "afk_timeout": 300,
+    "channels": [
+      {
+        "bitrate": 64000,
+        "id": 1,
+        "name": "Text Channels",
+        "nsfw": false,
+        "parent_id": null,
+        "permission_overwrites": [],
+        "position": 1,
+        "rate_limit_per_user": 0,
+        "topic": null,
+        "type": 4,
+        "user_limit": 0
+      },
+      {
+        "bitrate": 64000,
+        "id": 2,
+        "name": "general",
+        "nsfw": false,
+        "parent_id": 1,
+        "permission_overwrites": [],
+        "position": 1,
+        "rate_limit_per_user": 0,
+        "topic": null,
+        "type": 0,
+        "user_limit": 0
+      }
+    ],
+    "default_message_notifications": 0,
+    "description": null,
+    "explicit_content_filter": 0,
+    "icon_hash": null,
+    "name": "Friends & Family",
+    "preferred_locale": "en-US",
+    "region": "us-west",
+    "roles": [
+      {
+        "color": 0,
+        "hoist": false,
+        "id": 0,
+        "mentionable": false,
+        "name": "@everyone",
+        "permissions": 104324689
+      }
+    ],
+    "system_channel_flags": 0,
+    "system_channel_id": 2,
+    "verification_level": 0
+  },
+  "source_guild_id": "678070694164299796",
+  "updated_at": "2020-05-01T17:57:38+00:00",
+  "usage_count": 49605
+}

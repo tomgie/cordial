@@ -1,0 +1,16 @@
+{
+  "components": [
+    {
+      "components": [
+        {
+          "custom_id": "click_me",
+          "label": "Click me!",
+          "style": 1,
+          "type": 2
+        }
+      ],
+      "type": 1
+    }
+  ],
+  "flags": 32768
+}

@@ -1,0 +1,18 @@
+{
+  "components": [
+    {
+      "content": "It's dangerous to go alone!",
+      "type": 10
+    },
+    {
+      "divider": true,
+      "spacing": 1,
+      "type": 14
+    },
+    {
+      "content": "Take this.",
+      "type": 10
+    }
+  ],
+  "flags": 32768
+}

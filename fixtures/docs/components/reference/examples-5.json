@@ -1,0 +1,23 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "game_feedback",
+          "max_length": 4000,
+          "min_length": 100,
+          "placeholder": "Write your feedback here...",
+          "required": true,
+          "style": 2,
+          "type": 4
+        },
+        "description": "Please give us as much detail as possible so we can improve the game!",
+        "label": "What did you find interesting about the game?",
+        "type": 18
+      }
+    ],
+    "custom_id": "game_feedback_modal",
+    "title": "Game Feedback"
+  },
+  "type": 9
+}

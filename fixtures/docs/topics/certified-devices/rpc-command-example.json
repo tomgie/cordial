@@ -1,0 +1,27 @@
+{
+  "args": {
+    "devices": [
+      {
+        "automatic_gain_control": true,
+        "echo_cancellation": true,
+        "hardware_mute": false,
+        "id": "{0.0.1.00000000}.{6cff2b76-44a8-46b9-b528-262ad8609d9f}",
+        "model": {
+          "name": "Arctis 7",
+          "url": "https://steelseries.com/gaming-headsets/arctis-7"
+        },
+        "noise_suppression": true,
+        "related": [
+          "{0.0.1.00000000}.{6cff2b76-44a8-46b9-b528-262ad8609d9f}"
+        ],
+        "type": "audioinput",
+        "vendor": {
+          "name": "SteelSeries",
+          "url": "https://steelseries.com"
+        }
+      }
+    ]
+  },
+  "cmd": "SET_CERTIFIED_DEVICES",
+  "nonce": "9b4e9711-97f3-4f35-b047-32c82a51978e"
+}

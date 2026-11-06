@@ -1,0 +1,15 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "avatar": "a_bab14f271d565501444b2ca3be944b25",
+    "avatar_decoration_data": null,
+    "bot": false,
+    "discriminator": "0",
+    "flags": 64,
+    "global_name": "Mason",
+    "id": "53908232506183680",
+    "premium_type": 0,
+    "username": "Mason"
+  },
+  "evt": "CURRENT_USER_UPDATE"
+}

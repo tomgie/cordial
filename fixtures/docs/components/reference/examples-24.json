@@ -1,0 +1,18 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "like_checkbox",
+          "type": 23
+        },
+        "description": "😳😳😳",
+        "label": "Do you like me?",
+        "type": 18
+      }
+    ],
+    "custom_id": "secret_note_modal",
+    "title": "Secret Note"
+  },
+  "type": 9
+}

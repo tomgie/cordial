@@ -1,0 +1,7 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "secret": "e7eb30d2ee025ed05c71ea495f770b76454ee4e0"
+  },
+  "evt": "ACTIVITY_SPECTATE"
+}

@@ -1,0 +1,19 @@
+{
+  "data": {
+    "components": [
+      {
+        "component": {
+          "custom_id": "roles_selected",
+          "max_values": 10,
+          "required": true,
+          "type": 6
+        },
+        "label": "Select which roles to assign",
+        "type": 18
+      }
+    ],
+    "custom_id": "role_modal",
+    "title": "Role Select"
+  },
+  "type": 9
+}

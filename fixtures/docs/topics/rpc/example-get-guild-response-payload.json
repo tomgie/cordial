@@ -1,0 +1,10 @@
+{
+  "cmd": "GET_GUILD",
+  "data": {
+    "icon_url": null,
+    "id": "199737254929760256",
+    "members": [],
+    "name": "test"
+  },
+  "nonce": "9524922c-3d32-413a-bdaa-0804f4332588"
+}

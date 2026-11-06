@@ -1,0 +1,13 @@
+{
+  "components": [
+    {
+      "content": "This is a Text Display component.",
+      "type": 10
+    },
+    {
+      "content": "This is another Text Display component!",
+      "type": 10
+    }
+  ],
+  "flags": 32768
+}

@@ -1,0 +1,28 @@
+{
+  "channels": [
+    {
+      "id": "705216630279993882",
+      "name": "elephant",
+      "position": 2
+    },
+    {
+      "id": "669583461748992190",
+      "name": "groovy-music",
+      "position": 1
+    }
+  ],
+  "id": "290926798626999250",
+  "instant_invite": "https://discord.com/invite/abcdefg",
+  "members": [
+    {
+      "avatar": null,
+      "avatar_url": "https://cdn.discordapp.com/widget-avatars/FfvURgcr3Za92K3JtoCppqnYMppMDc5B-Rll74YrGCU/C-1DyBZPQ6t5q2RuATFuMFgq0_uEMZVzd_6LbGN_uJKvZflobA9diAlTjhf6CAESLLeTuu4dLuHFWOb_PNLteooNfhC4C6k5QgAGuxEOP12tVVVCvX6t64k14PMXZrGTDq8pWZhukP40Wg",
+      "discriminator": "0000",
+      "id": "0",
+      "status": "online",
+      "username": "1234"
+    }
+  ],
+  "name": "Test Server",
+  "presence_count": 1
+}

@@ -1,0 +1,51 @@
+{
+  "data": {
+    "dynamic": [
+      {
+        "name": "my_string",
+        "type": 1,
+        "value": "hello"
+      },
+      {
+        "name": "my_number",
+        "type": 2,
+        "value": 123.45
+      },
+      {
+        "name": "my_media",
+        "type": 3,
+        "value": {
+          "url": "https://example.com/some-media.png"
+        }
+      }
+    ],
+    "primary": {
+      "current_period_assists": 68,
+      "current_period_deaths": 21,
+      "current_period_games": 10,
+      "current_period_kills": 35,
+      "current_period_wins": 8,
+      "featured_played_character": "John Doe",
+      "featured_played_character_image": {
+        "url": "https://example.com/assets/character-images/john-doe.png"
+      },
+      "highest_rank": "Platinum",
+      "highest_rank_image": {
+        "url": "https://example.com/assets/rank-images/platinum.png"
+      },
+      "playtime_hours": 69.41,
+      "rank_image": {
+        "url": "https://example.com/assets/rank-images/silver.png"
+      },
+      "rank_name": "Silver",
+      "season": "Season 3",
+      "total_assists": 478,
+      "total_deaths": 561,
+      "total_games": 100,
+      "total_kills": 253,
+      "total_wins": 57
+    }
+  },
+  "metadata": null,
+  "username": "johndoe123"
+}

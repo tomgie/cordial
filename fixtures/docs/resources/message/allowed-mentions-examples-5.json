@@ -1,0 +1,12 @@
+{
+  "allowed_mentions": {
+    "parse": [
+      "users"
+    ],
+    "users": [
+      "1234",
+      "5678"
+    ]
+  },
+  "content": "@everyone <@1234> <@5678> <@9012> <@&200>"
+}

@@ -1,0 +1,7 @@
+{
+  "cmd": "DISPATCH",
+  "data": {
+    "user_id": "190320984123768832"
+  },
+  "evt": "SPEAKING_STOP"
+}

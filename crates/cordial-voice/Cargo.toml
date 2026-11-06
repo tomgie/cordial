@@ -12,6 +12,16 @@ authors.workspace = true
 [dependencies]
 cordial-model.workspace = true
 cordial-gateway.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+openmls.workspace = true
+openmls_rust_crypto.workspace = true
+openmls_basic_credential.workspace = true
+aes-gcm.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+subtle.workspace = true
 
 [lints]
 workspace = true

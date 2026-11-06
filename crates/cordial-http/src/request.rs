@@ -258,6 +258,117 @@ fn make_boundary() -> String {
     format!("cordial-{time:x}-{count:x}")
 }
 
+/// Image data for a request, as a data URI: `data:image/png;base64,...`.
+///
+/// Endpoints that set an icon, an avatar, a banner, or an emoji take this type.
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct ImageData(String);
+
+impl ImageData {
+    /// Makes image data from bytes and a media type, for example `image/png`.
+    #[must_use]
+    pub fn new(content_type: &str, bytes: &[u8]) -> Self {
+        Self(format!(
+            "data:{content_type};base64,{}",
+            encode_base64(bytes)
+        ))
+    }
+
+    /// Makes image data from bytes. The media type comes from the first bytes
+    /// (PNG, JPEG, GIF, WebP, or AVIF), else `image/png`.
+    #[must_use]
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        Self::new(sniff_image_type(bytes), bytes)
+    }
+
+    /// Makes image data from a complete data URI.
+    #[must_use]
+    pub fn from_data_uri(uri: impl Into<String>) -> Self {
+        Self(uri.into())
+    }
+
+    /// Gives the data URI.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for ImageData {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let header = self.0.split(',').next().unwrap_or_default();
+        write!(formatter, "ImageData({header},<{} bytes>)", self.0.len())
+    }
+}
+
+fn sniff_image_type(bytes: &[u8]) -> &'static str {
+    match bytes {
+        [0x89, b'P', b'N', b'G', ..] => "image/png",
+        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+        [b'G', b'I', b'F', b'8', ..] => "image/gif",
+        [
+            b'R',
+            b'I',
+            b'F',
+            b'F',
+            _,
+            _,
+            _,
+            _,
+            b'W',
+            b'E',
+            b'B',
+            b'P',
+            ..,
+        ] => "image/webp",
+        [
+            _,
+            _,
+            _,
+            _,
+            b'f',
+            b't',
+            b'y',
+            b'p',
+            b'a',
+            b'v',
+            b'i',
+            b'f',
+            ..,
+        ] => "image/avif",
+        _ => "image/png",
+    }
+}
+
+/// Encodes bytes as standard base64 with padding.
+#[must_use]
+pub fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let first = chunk[0];
+        let second = chunk.get(1).copied().unwrap_or(0);
+        let third = chunk.get(2).copied().unwrap_or(0);
+        let combined = (u32::from(first) << 16) | (u32::from(second) << 8) | u32::from(third);
+
+        output.push(char::from(ALPHABET[(combined >> 18) as usize & 63]));
+        output.push(char::from(ALPHABET[(combined >> 12) as usize & 63]));
+        output.push(if chunk.len() > 1 {
+            char::from(ALPHABET[(combined >> 6) as usize & 63])
+        } else {
+            '='
+        });
+        output.push(if chunk.len() > 2 {
+            char::from(ALPHABET[combined as usize & 63])
+        } else {
+            '='
+        });
+    }
+    output
+}
+
 /// Runs a check when `validate` is `true`, and converts its error.
 pub(crate) fn check(
     validate: bool,
@@ -293,6 +404,18 @@ mod tests {
             "name=\"files[0]\"; filename=\"a.txt\"\r\nContent-Type: text/plain\r\n\r\nhello\r\n"
         ));
         assert!(text.ends_with(&format!("--{boundary}--\r\n")));
+    }
+
+    #[test]
+    fn encodes_base64_and_image_data() {
+        assert_eq!(encode_base64(b""), "");
+        assert_eq!(encode_base64(b"f"), "Zg==");
+        assert_eq!(encode_base64(b"fo"), "Zm8=");
+        assert_eq!(encode_base64(b"foo"), "Zm9v");
+        assert_eq!(encode_base64(b"foobar"), "Zm9vYmFy");
+
+        let png = ImageData::from_bytes(&[0x89, b'P', b'N', b'G', 1]);
+        assert!(png.as_str().starts_with("data:image/png;base64,"));
     }
 
     #[test]

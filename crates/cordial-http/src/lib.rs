@@ -34,6 +34,7 @@ pub use client::{API_BASE, Client, ClientBuilder};
 pub use error::{ApiError, Error, FieldError, TransportError};
 pub use json_error::JsonErrorCode;
 pub use payload::MessagePayload;
+pub use request::{FileUpload, ImageData};
 pub use token::{Token, TokenKind};
 
 use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};

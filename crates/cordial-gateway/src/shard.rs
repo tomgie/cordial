@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -9,7 +10,7 @@ use cordial_http::Token;
 use cordial_model::gateway::RequestGuildMembers;
 use cordial_model::gateway::event::{Event, GuildMembersChunk};
 use cordial_model::gateway::{
-    Capabilities, EventTypes, IdentifyProperties, Intents, UpdatePresence,
+    Capabilities, EventTypes, IdentifyProperties, Intents, OpCode, SendPayload, UpdatePresence,
 };
 use cordial_model::guild::Member;
 use cordial_model::id::UserId;
@@ -29,6 +30,9 @@ use crate::queue::{IdentifyQueue, LocalIdentifyQueue};
 
 /// The default gateway URL. `GET /gateway/bot` gives the current one.
 pub const DEFAULT_GATEWAY_URL: &str = "wss://gateway.discord.gg";
+
+/// The longest wait of [`MemberChunks::next`] for the next chunk.
+const MEMBER_CHUNK_TIMEOUT: Duration = Duration::from_secs(60);
 
 type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -237,7 +241,7 @@ enum Request {
     Command(Command, oneshot::Sender<Result<(), CommandError>>),
     Members(
         RequestGuildMembers,
-        mpsc::Sender<GuildMembersChunk>,
+        mpsc::UnboundedSender<GuildMembersChunk>,
         oneshot::Sender<Result<(), CommandError>>,
     ),
     Close(CloseMode, oneshot::Sender<Option<Session>>),
@@ -246,16 +250,29 @@ enum Request {
 /// The replies (`GUILD_MEMBERS_CHUNK`) to one Request Guild Members command.
 #[derive(Debug)]
 pub struct MemberChunks {
-    receiver: mpsc::Receiver<GuildMembersChunk>,
+    receiver: mpsc::UnboundedReceiver<GuildMembersChunk>,
 }
 
 impl MemberChunks {
-    /// Gives the next chunk. Gives `None` after the last chunk, or when the shard stopped.
+    /// Gives the next chunk.
+    ///
+    /// Gives `None` after the last chunk, when the shard stopped, or when the shard started a
+    /// new session (Discord does not answer a request of an old session). Also gives `None`
+    /// when no chunk arrives within 60 seconds.
     pub async fn next(&mut self) -> Option<GuildMembersChunk> {
-        self.receiver.recv().await
+        match tokio::time::timeout(MEMBER_CHUNK_TIMEOUT, self.receiver.recv()).await {
+            Ok(chunk) => chunk,
+            Err(_) => {
+                // The shard sees the closed channel and forgets the request.
+                self.receiver.close();
+                None
+            }
+        }
     }
 
     /// Waits for all chunks and gives all members, and the IDs that were not found.
+    ///
+    /// The result is not complete when [`MemberChunks::next`] stops early (see there).
     pub async fn collect(mut self) -> (Vec<Member>, Vec<UserId>) {
         let mut members = Vec::new();
         let mut not_found = Vec::new();
@@ -320,6 +337,10 @@ impl ShardHandle {
     /// The shard sets a unique nonce when the request has none. The chunks also arrive in
     /// the normal event stream.
     ///
+    /// Do not wait for the chunks in the task that reads the events. When the event channel
+    /// is full, the shard cannot read the next chunk, and the wait ends only after the
+    /// timeout of [`MemberChunks::next`].
+    ///
     /// # Errors
     ///
     /// Gives an error when the command is not valid now (for example an all-member request
@@ -328,7 +349,8 @@ impl ShardHandle {
         &self,
         request: RequestGuildMembers,
     ) -> Result<MemberChunks, ShardError> {
-        let (chunks, receiver) = mpsc::channel(16);
+        // Unbounded, so that a caller that does not read the chunks cannot stop the shard.
+        let (chunks, receiver) = mpsc::unbounded_channel();
         let (reply, answer) = oneshot::channel();
         self.requests
             .send(Request::Members(request, chunks, reply))
@@ -447,6 +469,18 @@ enum Next {
     Stop,
 }
 
+/// A request of a handle to close the shard. The reply is `None` when all handles are gone.
+type CloseRequest = (CloseMode, Option<oneshot::Sender<Option<Session>>>);
+
+/// The receiver of the chunks of one Request Guild Members command.
+struct Collector {
+    chunks: mpsc::UnboundedSender<GuildMembersChunk>,
+    /// The encoded command. The driver compares it with each sent frame.
+    payload: String,
+    /// The command went out. After a new session, its chunks never arrive.
+    sent: bool,
+}
+
 struct Driver {
     config: ShardConfig,
     core: ShardCore,
@@ -454,8 +488,9 @@ struct Driver {
     requests: mpsc::Receiver<Request>,
     status: Arc<Mutex<Status>>,
     failures: u32,
-    member_collectors: HashMap<String, mpsc::Sender<GuildMembersChunk>>,
+    member_collectors: HashMap<String, Collector>,
     next_nonce: u64,
+    close_request: Option<CloseRequest>,
 }
 
 impl Driver {
@@ -479,10 +514,23 @@ impl Driver {
             failures: 0,
             member_collectors: HashMap::new(),
             next_nonce: 0,
+            close_request: None,
         }
     }
 
     async fn run(mut self) {
+        self.run_connections().await;
+
+        // A close request while no connection is open.
+        if let Some((mode, reply)) = self.close_request.take() {
+            let session = self.finish_close(mode);
+            if let Some(reply) = reply {
+                let _ = reply.send(session);
+            }
+        }
+    }
+
+    async fn run_connections(&mut self) {
         let shard_id = self.config.shard[0];
         loop {
             let resume = self.core.will_resume();
@@ -491,34 +539,121 @@ impl Driver {
             }
 
             let url = self.connection_url();
-            let socket = match tokio::time::timeout(
+            let connect = tokio::time::timeout(
                 Duration::from_secs(30),
                 tokio_tungstenite::connect_async(&url),
-            )
-            .await
-            {
+            );
+            let Some(connected) = self.while_offline(connect).await else {
+                return;
+            };
+            let socket = match connected {
                 Ok(Ok((socket, _))) => socket,
                 Ok(Err(error)) => {
                     tracing::warn!(shard = shard_id, %error, "gateway connection failed");
-                    self.wait_after_failure().await;
+                    if !self.wait_after_failure().await {
+                        return;
+                    }
                     continue;
                 }
                 Err(_) => {
                     tracing::warn!(shard = shard_id, "gateway connection timed out");
-                    self.wait_after_failure().await;
+                    if !self.wait_after_failure().await {
+                        return;
+                    }
                     continue;
                 }
             };
 
             match self.run_connection(socket).await {
                 Next::Reconnect(delay) => {
-                    if !delay.is_zero() {
-                        tokio::time::sleep(delay).await;
+                    if !delay.is_zero()
+                        && self
+                            .while_offline(tokio::time::sleep(delay))
+                            .await
+                            .is_none()
+                    {
+                        return;
                     }
                 }
                 Next::Stop => return,
             }
         }
+    }
+
+    /// Runs `work` and answers handle requests while no connection is open. Gives `None`
+    /// when the shard must stop.
+    async fn while_offline<T>(&mut self, work: impl Future<Output = T>) -> Option<T> {
+        tokio::pin!(work);
+        loop {
+            tokio::select! {
+                output = &mut work => return Some(output),
+                request = self.requests.recv() => {
+                    if !self.handle_request(request) {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Answers a handle request. Gives `false` when the shard must stop.
+    ///
+    /// A command waits in the core until the session is active, within the send limit.
+    fn handle_request(&mut self, request: Option<Request>) -> bool {
+        let now = std::time::Instant::now();
+        match request {
+            Some(Request::Command(command, reply)) => {
+                let result = self.core.send_command(&command, now);
+                let _ = reply.send(result);
+                true
+            }
+            Some(Request::Members(request, chunks, reply)) => {
+                let result = self.request_members(request, chunks, now);
+                let _ = reply.send(result);
+                true
+            }
+            Some(Request::Close(mode, reply)) => {
+                self.close_request = Some((mode, Some(reply)));
+                false
+            }
+            None => {
+                self.close_request = Some((CloseMode::End, None));
+                false
+            }
+        }
+    }
+
+    fn request_members(
+        &mut self,
+        mut request: RequestGuildMembers,
+        chunks: mpsc::UnboundedSender<GuildMembersChunk>,
+        now: std::time::Instant,
+    ) -> Result<(), CommandError> {
+        // Forget the requests that nobody reads, so that the map does not grow.
+        self.member_collectors
+            .retain(|_, collector| !collector.chunks.is_closed());
+
+        let nonce = request.nonce.clone().unwrap_or_else(|| {
+            self.next_nonce += 1;
+            format!("cordial-{}-{}", self.config.shard[0], self.next_nonce)
+        });
+        request.nonce = Some(nonce.clone());
+        let payload =
+            serde_json::to_string(&SendPayload::new(OpCode::RequestGuildMembers, &request))
+                .unwrap_or_default();
+
+        let result = self
+            .core
+            .send_command(&Command::RequestGuildMembers(request), now);
+        if result.is_ok() {
+            let collector = Collector {
+                chunks,
+                payload,
+                sent: false,
+            };
+            self.member_collectors.insert(nonce, collector);
+        }
+        result
     }
 
     fn connection_url(&self) -> String {
@@ -535,13 +670,27 @@ impl Driver {
         url
     }
 
-    async fn wait_after_failure(&mut self) {
+    /// Waits before the next connection attempt. Gives `false` when the shard must stop.
+    async fn wait_after_failure(&mut self) -> bool {
         self.failures = self.failures.saturating_add(1);
         let seconds = 2_u64.saturating_pow(self.failures.min(6)).min(60);
-        tokio::time::sleep(Duration::from_secs(seconds)).await;
+        let pause = tokio::time::sleep(Duration::from_secs(seconds));
+        self.while_offline(pause).await.is_some()
     }
 
     async fn run_connection(&mut self, mut socket: Socket) -> Next {
+        let next = self.drive_connection(&mut socket).await;
+
+        if let Some((mode, reply)) = self.close_request.take() {
+            let session = self.close(&mut socket, mode).await;
+            if let Some(reply) = reply {
+                let _ = reply.send(session);
+            }
+        }
+        next
+    }
+
+    async fn drive_connection(&mut self, socket: &mut Socket) -> Next {
         let mut decompressor = match Decompressor::new(self.config.compression) {
             Ok(decompressor) => decompressor,
             Err(error) => {
@@ -558,7 +707,7 @@ impl Driver {
         let mut identify_permit: Option<cordial_http::transport::BoxFuture<'static, ()>> = None;
 
         loop {
-            if let Some(next) = self.do_actions(&mut socket, &mut identify_permit).await {
+            if let Some(next) = self.do_actions(socket, &mut identify_permit).await {
                 return next;
             }
 
@@ -611,34 +760,11 @@ impl Driver {
                     identify_permit = None;
                     self.core.identify(std::time::Instant::now());
                 }
-                request = self.requests.recv() => match request {
-                    Some(Request::Command(command, reply)) => {
-                        let result = self.core.send_command(&command, std::time::Instant::now());
-                        let _ = reply.send(result);
-                    }
-                    Some(Request::Members(mut request, chunks, reply)) => {
-                        let nonce = request.nonce.clone().unwrap_or_else(|| {
-                            self.next_nonce += 1;
-                            format!("cordial-{}-{}", self.config.shard[0], self.next_nonce)
-                        });
-                        request.nonce = Some(nonce.clone());
-                        let command = Command::RequestGuildMembers(request);
-                        let result = self.core.send_command(&command, std::time::Instant::now());
-                        if result.is_ok() {
-                            self.member_collectors.insert(nonce, chunks);
-                        }
-                        let _ = reply.send(result);
-                    }
-                    Some(Request::Close(mode, reply)) => {
-                        let session = self.close(&mut socket, mode).await;
-                        let _ = reply.send(session);
+                request = self.requests.recv() => {
+                    if !self.handle_request(request) {
                         return Next::Stop;
                     }
-                    None => {
-                        self.close(&mut socket, CloseMode::End).await;
-                        return Next::Stop;
-                    }
-                },
+                }
             }
         }
     }
@@ -658,7 +784,9 @@ impl Driver {
         while let Some(action) = self.core.poll_action() {
             match action {
                 Action::Send(text) => {
+                    self.mark_sent(&text);
                     if let Err(error) = socket.send(Message::Text(text.into())).await {
+                        // The core removes the other sends of this connection and reconnects.
                         tracing::warn!(%error, "cannot send to the gateway");
                         self.core.closed(None, std::time::Instant::now());
                     }
@@ -696,6 +824,11 @@ impl Driver {
                     if matches!(lifecycle, Lifecycle::Ready { .. } | Lifecycle::Resumed) {
                         self.failures = 0;
                     }
+                    if matches!(lifecycle, Lifecycle::Ready { .. }) {
+                        // A new session does not answer the requests of an old session.
+                        self.member_collectors
+                            .retain(|_, collector| !collector.sent);
+                    }
                     self.update_status();
                     if !self.emit(ShardEvent::Lifecycle(lifecycle)).await {
                         return Some(Next::Stop);
@@ -714,7 +847,7 @@ impl Driver {
 
     async fn dispatch(&mut self, name: &str, data: &serde_json::value::RawValue) -> bool {
         if name == "GUILD_MEMBERS_CHUNK" && !self.member_collectors.is_empty() {
-            self.collect_members(data).await;
+            self.collect_members(data);
         }
 
         let always = matches!(name, "READY" | "RESUMED" | "RATE_LIMITED");
@@ -738,7 +871,7 @@ impl Driver {
         }
     }
 
-    async fn collect_members(&mut self, data: &serde_json::value::RawValue) {
+    fn collect_members(&mut self, data: &serde_json::value::RawValue) {
         let Ok(chunk) = serde_json::from_str::<GuildMembersChunk>(data.get()) else {
             return;
         };
@@ -750,9 +883,17 @@ impl Driver {
         };
 
         let last = chunk.chunk_index + 1 >= chunk.chunk_count;
-        let delivered = collector.send(chunk).await.is_ok();
+        let delivered = collector.chunks.send(chunk).is_ok();
         if last || !delivered {
             self.member_collectors.remove(&nonce);
+        }
+    }
+
+    fn mark_sent(&mut self, payload: &str) {
+        for collector in self.member_collectors.values_mut() {
+            if collector.payload == payload {
+                collector.sent = true;
+            }
         }
     }
 
@@ -766,6 +907,10 @@ impl Driver {
             reason: "".into(),
         };
         let _ = tokio::time::timeout(Duration::from_secs(5), socket.close(Some(frame))).await;
+        self.finish_close(mode)
+    }
+
+    fn finish_close(&mut self, mode: CloseMode) -> Option<Session> {
         self.update_status();
         lock(&self.status).active = false;
         match mode {
@@ -781,8 +926,9 @@ impl Driver {
         status.active = self.core.is_active();
     }
 
-    /// Sends an event to the consumer. Gives `false` when the consumer is gone.
-    async fn emit(&self, event: ShardEvent) -> bool {
+    /// Sends an event to the consumer. Gives `false` when the consumer is gone or the shard
+    /// must stop.
+    async fn emit(&mut self, event: ShardEvent) -> bool {
         if matches!(event, ShardEvent::Lifecycle(Lifecycle::HeartbeatAck { .. })) {
             self.update_status();
         }
@@ -790,6 +936,54 @@ impl Driver {
             shard_id: self.config.shard[0],
             event,
         };
-        self.events.send(message).await.is_ok()
+
+        match self.events.try_reserve() {
+            Ok(permit) => {
+                permit.send(message);
+                return true;
+            }
+            Err(mpsc::error::TrySendError::Closed(())) => return false,
+            Err(mpsc::error::TrySendError::Full(())) => {}
+        }
+
+        // A clone, so that the wait for capacity does not borrow `self`.
+        let events = self.events.clone();
+        loop {
+            tokio::select! {
+                permit = events.reserve() => {
+                    let Ok(permit) = permit else {
+                        return false;
+                    };
+                    permit.send(message);
+                    return true;
+                }
+                // The consumer can call a handle in its event loop while the channel is full.
+                // Without an answer, the consumer and the shard wait for each other.
+                request = self.requests.recv() => {
+                    if !self.handle_request(request) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A request without an answer kept the caller waiting for ever.
+    #[tokio::test(start_paused = true)]
+    async fn member_chunks_end_when_no_chunk_arrives() {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let mut chunks = MemberChunks { receiver };
+        let start = Instant::now();
+
+        let next = chunks.next().await;
+
+        assert!(next.is_none());
+        assert_eq!(start.elapsed(), MEMBER_CHUNK_TIMEOUT);
+        assert!(sender.is_closed());
     }
 }

@@ -284,3 +284,186 @@ async fn collects_member_chunks_by_nonce() {
     assert_eq!(members.len(), 2);
     assert!(not_found.is_empty());
 }
+
+/// Accepts a connection, sends Hello, reads Identify, and sends READY.
+async fn ready_connection(listener: &TcpListener, url: &str) -> ServerSocket {
+    let mut socket = accept(listener).await;
+    send_json(
+        &mut socket,
+        &json!({"op": 10, "d": {"heartbeat_interval": 45000}}),
+    )
+    .await;
+    expect_op(&mut socket, 2).await;
+    send_json(&mut socket, &ready(url)).await;
+    socket
+}
+
+fn query_command(query: &str) -> cordial_gateway::Command {
+    cordial_gateway::Command::RequestGuildMembers(
+        cordial_model::gateway::RequestGuildMembers::query(
+            cordial_model::id::GuildId::new_const(100),
+            query,
+            10,
+        ),
+    )
+}
+
+fn member_chunk(nonce: &str, index: usize, count: usize, sequence: usize) -> Value {
+    let user_id = (index + 1).to_string();
+    json!({"op": 0, "s": sequence, "t": "GUILD_MEMBERS_CHUNK", "d": {
+        "guild_id": "100",
+        "members": [{"user": {"id": user_id, "username": "u", "discriminator": "0", "avatar": null}, "roles": [], "joined_at": "2026-01-01T00:00:00+00:00", "deaf": false, "mute": false, "flags": 0}],
+        "chunk_index": index,
+        "chunk_count": count,
+        "nonce": nonce
+    }})
+}
+
+/// The shard read handle requests only on an open connection, so a command waited for the
+/// whole connect phase.
+#[tokio::test]
+async fn commands_wait_in_the_queue_while_the_shard_connects() {
+    let (listener, url) = listen().await;
+    let (shard, mut events) = Shard::start(config(&url));
+
+    // The listener does not accept yet, so the WebSocket handshake waits.
+    let sent = tokio::time::timeout(Duration::from_secs(2), shard.send(query_command("ab"))).await;
+    assert!(matches!(sent, Ok(Ok(()))));
+
+    let mut socket = ready_connection(&listener, &url).await;
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Lifecycle(Lifecycle::Ready { .. }))
+    })
+    .await;
+    let payload = expect_op(&mut socket, 8).await;
+    assert_eq!(payload["d"]["query"], "ab");
+}
+
+/// A close during the pause after a failed connection waited until a connection was open.
+#[tokio::test]
+async fn close_answers_while_no_connection_is_open() {
+    let (listener, url) = listen().await;
+    drop(listener);
+    let session = cordial_gateway::Session::new("session-1".to_owned(), 5, url.clone());
+    let (shard, _events) = Shard::start(config(&url).resume(session.clone()));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let closed = tokio::time::timeout(
+        Duration::from_secs(3),
+        shard.close(cordial_gateway::CloseMode::Resumable),
+    )
+    .await;
+
+    assert_eq!(closed.unwrap(), Some(session));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert!(shard.is_stopped());
+}
+
+/// A consumer that called a handle in its event loop, while the event channel was full,
+/// waited for the shard, and the shard waited for the consumer.
+#[tokio::test]
+async fn handle_calls_answer_while_the_event_channel_is_full() {
+    let (listener, url) = listen().await;
+    let mut config = config(&url);
+    config.event_buffer = 1;
+    let (shard, _events) = Shard::start(config);
+
+    // `Connecting` fills the channel, so the shard waits to give `Connected`.
+    let mut socket = accept(&listener).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let sent = tokio::time::timeout(Duration::from_secs(2), shard.send(query_command("ab"))).await;
+    assert!(matches!(sent, Ok(Ok(()))));
+    let closed = tokio::time::timeout(
+        Duration::from_secs(2),
+        shard.close(cordial_gateway::CloseMode::End),
+    )
+    .await;
+    assert!(closed.is_ok());
+
+    let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let Message::Close(Some(frame)) = message else {
+        panic!("expected a close frame, got {message:?}");
+    };
+    assert_eq!(frame.code, CloseCode::Normal);
+}
+
+/// The chunk channel had a capacity of 16. A caller that did not read the chunks stopped
+/// the shard.
+#[tokio::test]
+async fn unread_member_chunks_do_not_stop_the_shard() {
+    let (listener, url) = listen().await;
+    let (shard, mut events) = Shard::start(config(&url));
+    let mut socket = ready_connection(&listener, &url).await;
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Lifecycle(Lifecycle::Ready { .. }))
+    })
+    .await;
+
+    let request = cordial_model::gateway::RequestGuildMembers::query(
+        cordial_model::id::GuildId::new_const(100),
+        "",
+        0,
+    );
+    let chunks = shard.request_members(request).await.unwrap();
+    let payload = expect_op(&mut socket, 8).await;
+    let nonce = payload["d"]["nonce"].as_str().unwrap().to_owned();
+    for index in 0..20 {
+        send_json(&mut socket, &member_chunk(&nonce, index, 20, index + 2)).await;
+    }
+    send_json(
+        &mut socket,
+        &json!({"op": 0, "s": 30, "t": "MESSAGE_DELETE", "d": {"id": "5", "channel_id": "6"}}),
+    )
+    .await;
+
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Dispatch(event) if matches!(**event, Event::MessageDelete(_)))
+    })
+    .await;
+    let (members, _) = tokio::time::timeout(Duration::from_secs(5), chunks.collect())
+        .await
+        .unwrap();
+    assert_eq!(members.len(), 20);
+}
+
+/// After a new session, the chunks of an old request never arrive, and the caller waited
+/// for ever.
+#[tokio::test]
+async fn member_chunks_end_after_a_new_session() {
+    let (listener, url) = listen().await;
+    let (shard, mut events) = Shard::start(config(&url));
+    let mut socket = ready_connection(&listener, &url).await;
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Lifecycle(Lifecycle::Ready { .. }))
+    })
+    .await;
+
+    let request = cordial_model::gateway::RequestGuildMembers::query(
+        cordial_model::id::GuildId::new_const(100),
+        "",
+        0,
+    );
+    let mut chunks = shard.request_members(request).await.unwrap();
+    expect_op(&mut socket, 8).await;
+
+    // Close code 4009: the session timed out, so the shard starts a new one.
+    socket
+        .close(Some(CloseFrame {
+            code: CloseCode::Library(4009),
+            reason: "".into(),
+        }))
+        .await
+        .unwrap();
+    let _socket = ready_connection(&listener, &url).await;
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Lifecycle(Lifecycle::Ready { .. }))
+    })
+    .await;
+
+    let next = tokio::time::timeout(Duration::from_secs(2), chunks.next()).await;
+    assert!(matches!(next, Ok(None)));
+}

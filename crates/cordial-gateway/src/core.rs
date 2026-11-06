@@ -28,6 +28,8 @@ pub const RESERVED_SENDS: u32 = 3;
 pub const MEMBER_REQUEST_INTERVAL: Duration = Duration::from_secs(30);
 /// The close code that the core uses to reconnect and keep the session (not 1000 or 1001).
 pub const RESUME_CLOSE_CODE: u16 = 4900;
+/// The time that a new connection waits for Hello before it connects again.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// The settings of a shard core.
 #[derive(Clone, Debug)]
@@ -274,6 +276,7 @@ pub struct ShardCore {
     session: Option<Session>,
     sequence: Option<u64>,
     heartbeat_interval: Option<Duration>,
+    hello_deadline: Option<Instant>,
     next_heartbeat: Option<Instant>,
     heartbeat_sent_at: Option<Instant>,
     ack_pending: bool,
@@ -281,8 +284,16 @@ pub struct ShardCore {
     limiter: SendLimiter,
     pending: VecDeque<String>,
     member_requests: HashMap<GuildId, Instant>,
-    actions: VecDeque<Action>,
+    actions: VecDeque<Queued>,
     random: u64,
+}
+
+/// An action in the queue. A command send goes back to `pending` when the connection ends
+/// before the driver takes it.
+#[derive(Debug)]
+struct Queued {
+    action: Action,
+    command: bool,
 }
 
 impl ShardCore {
@@ -299,6 +310,7 @@ impl ShardCore {
             session: None,
             sequence: None,
             heartbeat_interval: None,
+            hello_deadline: None,
             next_heartbeat: None,
             heartbeat_sent_at: None,
             ack_pending: false,
@@ -368,24 +380,30 @@ impl ShardCore {
 
     /// Takes the next action.
     pub fn poll_action(&mut self) -> Option<Action> {
-        self.actions.pop_front()
+        self.actions.pop_front().map(|queued| queued.action)
     }
 
     /// Gives the next time at which [`ShardCore::tick`] must run.
     #[must_use]
     pub fn next_deadline(&self) -> Option<Instant> {
-        let heartbeat = self.next_heartbeat;
-        let flush = (!self.pending.is_empty()).then(|| self.limiter.window_end());
-        match (heartbeat, flush) {
-            (Some(first), Some(second)) => Some(first.min(second)),
-            (first, second) => first.or(second),
-        }
+        // Only an active session flushes the queue. In other states, the end of the send
+        // window is not a reason to wake up, and an old window end makes the driver spin.
+        let flush = (self.state == State::Active && !self.pending.is_empty())
+            .then(|| self.limiter.window_end());
+        [self.next_heartbeat, self.hello_deadline, flush]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// Reports that a new WebSocket connection is open.
+    ///
+    /// When Hello does not arrive within 20 seconds, the core connects again.
     pub fn connected(&mut self, now: Instant) {
+        self.take_back_unsent();
         self.state = State::AwaitingHello;
         self.heartbeat_interval = None;
+        self.hello_deadline = Some(now + HELLO_TIMEOUT);
         self.next_heartbeat = None;
         self.heartbeat_sent_at = None;
         self.ack_pending = false;
@@ -393,32 +411,44 @@ impl ShardCore {
     }
 
     /// Reports that the connection closed, with the close code if one arrived.
+    ///
+    /// Also call it when a send fails. Then the core sends nothing more on the old connection.
     pub fn closed(&mut self, code: Option<u16>, _now: Instant) {
+        self.take_back_unsent();
         if self.state == State::Stopped {
             return;
         }
+        // A reconnect is already in the queue. A second one would close the next connection.
+        let reconnect_queued = self.state == State::Disconnected;
         self.state = State::Disconnected;
+        self.hello_deadline = None;
         self.next_heartbeat = None;
 
         let Some(code) = code else {
-            self.reconnect(ReconnectKind::Resume, Duration::ZERO);
+            if !reconnect_queued {
+                self.reconnect(ReconnectKind::Resume, Duration::ZERO);
+            }
             return;
         };
 
         let close = CloseCode::from_value(code);
         if !close.is_unknown() && !close.can_reconnect() {
             self.state = State::Stopped;
-            self.actions
-                .push_back(Action::Fatal(FatalError::Closed { code }));
+            self.push_action(Action::Fatal(FatalError::Closed { code }));
             return;
         }
 
-        if close.needs_new_session() {
+        // The next connection resumes only when a session is left, so a queued reconnect
+        // stays correct after the session is cleared.
+        let kind = if close.needs_new_session() {
             self.session = None;
             self.sequence = None;
-            self.reconnect(ReconnectKind::Identify, Duration::ZERO);
+            ReconnectKind::Identify
         } else {
-            self.reconnect(ReconnectKind::Resume, Duration::ZERO);
+            ReconnectKind::Resume
+        };
+        if !reconnect_queued {
+            self.reconnect(kind, Duration::ZERO);
         }
     }
 
@@ -497,6 +527,16 @@ impl ShardCore {
 
     /// Reports that the time is `now`. Sends due heartbeats and queued commands.
     pub fn tick(&mut self, now: Instant) {
+        if let Some(due) = self.hello_deadline
+            && now >= due
+        {
+            tracing::warn!(shard = self.config.shard[0], "no Hello; reconnecting");
+            self.state = State::Disconnected;
+            self.hello_deadline = None;
+            self.reconnect(ReconnectKind::Resume, Duration::ZERO);
+            return;
+        }
+
         if let Some(due) = self.next_heartbeat
             && now >= due
         {
@@ -506,7 +546,7 @@ impl ShardCore {
                     shard = self.config.shard[0],
                     "no heartbeat acknowledgement; reconnecting"
                 );
-                self.actions.push_back(Action::Lifecycle(Lifecycle::Zombie));
+                self.push_action(Action::Lifecycle(Lifecycle::Zombie));
                 self.state = State::Disconnected;
                 self.next_heartbeat = None;
                 self.reconnect(ReconnectKind::Resume, Duration::ZERO);
@@ -536,9 +576,9 @@ impl ShardCore {
                 self.on_hello(&hello, now);
             }
             OpCode::Reconnect => {
-                self.actions
-                    .push_back(Action::Lifecycle(Lifecycle::ReconnectRequested));
+                self.push_action(Action::Lifecycle(Lifecycle::ReconnectRequested));
                 self.state = State::Disconnected;
+                self.hello_deadline = None;
                 self.next_heartbeat = None;
                 self.reconnect(ReconnectKind::Resume, Duration::ZERO);
             }
@@ -555,10 +595,11 @@ impl ShardCore {
 
     fn on_hello(&mut self, hello: &Hello, now: Instant) {
         let interval = Duration::from_millis(hello.heartbeat_interval);
+        self.hello_deadline = None;
         self.heartbeat_interval = Some(interval);
         self.next_heartbeat = Some(now + interval.mul_f64(self.next_random_fraction()));
         self.ack_pending = false;
-        self.actions.push_back(Action::Lifecycle(Lifecycle::Hello {
+        self.push_action(Action::Lifecycle(Lifecycle::Hello {
             heartbeat_interval: interval,
         }));
 
@@ -571,7 +612,7 @@ impl ShardCore {
             }
             _ => {
                 self.state = State::AwaitingIdentifyPermit;
-                self.actions.push_back(Action::RequestIdentify);
+                self.push_action(Action::RequestIdentify);
             }
         }
     }
@@ -581,15 +622,14 @@ impl ShardCore {
         if let Some(sent_at) = self.heartbeat_sent_at {
             let latency = now.saturating_duration_since(sent_at);
             self.latency = Some(latency);
-            self.actions
-                .push_back(Action::Lifecycle(Lifecycle::HeartbeatAck { latency }));
+            self.push_action(Action::Lifecycle(Lifecycle::HeartbeatAck { latency }));
         }
     }
 
     fn on_invalid_session(&mut self, resumable: bool) {
-        self.actions
-            .push_back(Action::Lifecycle(Lifecycle::InvalidSession { resumable }));
+        self.push_action(Action::Lifecycle(Lifecycle::InvalidSession { resumable }));
         self.state = State::Disconnected;
+        self.hello_deadline = None;
         self.next_heartbeat = None;
 
         if resumable && self.session.is_some() {
@@ -637,21 +677,20 @@ impl ShardCore {
                     resume_url: ready.resume_gateway_url,
                 });
                 self.state = State::Active;
-                self.actions.push_back(Action::Lifecycle(Lifecycle::Ready {
+                self.push_action(Action::Lifecycle(Lifecycle::Ready {
                     session_id: ready.session_id,
                 }));
                 self.flush(now);
             }
             "RESUMED" => {
                 self.state = State::Active;
-                self.actions
-                    .push_back(Action::Lifecycle(Lifecycle::Resumed));
+                self.push_action(Action::Lifecycle(Lifecycle::Resumed));
                 self.flush(now);
             }
             _ => {}
         }
 
-        self.actions.push_back(Action::Dispatch {
+        self.push_action(Action::Dispatch {
             name: name.to_owned(),
             data,
         });
@@ -677,7 +716,7 @@ impl ShardCore {
         if !self.limiter.try_take(now, true) {
             tracing::warn!("send limit reached; an essential payload goes out anyway");
         }
-        self.actions.push_back(Action::Send(payload));
+        self.push_action(Action::Send(payload));
     }
 
     fn flush(&mut self, now: Instant) {
@@ -686,9 +725,37 @@ impl ShardCore {
         }
         while !self.pending.is_empty() && self.limiter.try_take(now, false) {
             if let Some(payload) = self.pending.pop_front() {
-                self.actions.push_back(Action::Send(payload));
+                self.actions.push_back(Queued {
+                    action: Action::Send(payload),
+                    command: true,
+                });
             }
         }
+    }
+
+    /// Removes the sends of the old connection from the queue. Commands go back to the front
+    /// of `pending` in their order, so that the next session sends them.
+    fn take_back_unsent(&mut self) {
+        let mut unsent = Vec::new();
+        self.actions.retain_mut(|queued| match &mut queued.action {
+            Action::Send(payload) => {
+                if queued.command {
+                    unsent.push(std::mem::take(payload));
+                }
+                false
+            }
+            _ => true,
+        });
+        for payload in unsent.into_iter().rev() {
+            self.pending.push_front(payload);
+        }
+    }
+
+    fn push_action(&mut self, action: Action) {
+        self.actions.push_back(Queued {
+            action,
+            command: false,
+        });
     }
 
     fn reconnect(&mut self, kind: ReconnectKind, delay: Duration) {
@@ -697,7 +764,7 @@ impl ShardCore {
         } else {
             kind
         };
-        self.actions.push_back(Action::Reconnect {
+        self.push_action(Action::Reconnect {
             kind,
             close_code: RESUME_CLOSE_CODE,
             delay,

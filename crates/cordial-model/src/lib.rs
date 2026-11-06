@@ -44,6 +44,7 @@ pub mod soundboard;
 pub mod sticker;
 pub mod time;
 pub mod user;
+pub mod validate;
 pub mod voice;
 pub mod webhook;
 

@@ -23,6 +23,10 @@ use crate::protocol::{
 
 /// The number of new sessions in a row that can fail before the core stops.
 pub const MAX_SESSION_FAILURES: u32 = 3;
+/// The number of resumes in a row that can fail before the core starts a new session.
+const MAX_RESUME_ATTEMPTS: u32 = 5;
+/// The longest delay before a resume.
+const MAX_RESUME_DELAY: Duration = Duration::from_secs(30);
 
 /// An E2EE session that the core and the media tasks share.
 pub type SharedE2ee = Arc<Mutex<Box<dyn E2eeSession>>>;
@@ -87,11 +91,15 @@ impl ConnectionInfo {
         }
     }
 
-    /// Tells if `other` needs a new voice session: the session, the token, or the endpoint
-    /// changed.
+    /// Tells if `other` needs a new voice session: the session, the token, the endpoint, or
+    /// the channel changed.
+    ///
+    /// The channel is part of the compare because DAVE uses the channel ID as the group ID
+    /// of the session.
     #[must_use]
     pub fn needs_new_session(&self, other: &Self) -> bool {
         self.session_id != other.session_id
+            || self.channel_id != other.channel_id
             || self.token != other.token
             || self.endpoint != other.endpoint
             || self.guild_id != other.guild_id
@@ -270,6 +278,7 @@ pub struct VoiceCore {
     mode: Option<EncryptionMode>,
     speaking: SpeakingFlags,
     session_failures: u32,
+    resume_attempts: u32,
     actions: VecDeque<VoiceAction>,
 }
 
@@ -306,6 +315,7 @@ impl VoiceCore {
             mode: None,
             speaking: SpeakingFlags::NONE,
             session_failures: 0,
+            resume_attempts: 0,
             actions: VecDeque::new(),
         }
     }
@@ -518,8 +528,13 @@ impl VoiceCore {
                 self.on_heartbeat_ack(ack, now);
             }
             VoiceOpCode::Resumed => {
+                if self.state != State::Resuming {
+                    tracing::debug!("Resumed without a resume; ignored");
+                    return Ok(());
+                }
                 self.state = State::Active;
                 self.session_failures = 0;
+                self.resume_attempts = 0;
                 self.push_event(CoreEvent::Resumed);
             }
             VoiceOpCode::Speaking => {
@@ -631,11 +646,14 @@ impl VoiceCore {
     }
 
     fn on_ready(&mut self, ready: Ready) {
+        if self.state != State::Identifying {
+            tracing::warn!("Ready outside of a handshake; ignored");
+            return;
+        }
         let Some(mode) = EncryptionMode::select(&ready.modes) else {
             self.stop(VoiceFatal::NoEncryptionMode);
             return;
         };
-        self.identified = true;
         self.ssrc = Some(ready.ssrc);
         self.mode = Some(mode);
         self.state = State::AwaitingDiscovery;
@@ -648,6 +666,12 @@ impl VoiceCore {
     }
 
     fn on_session_description(&mut self, description: &SessionDescription) {
+        // Each Session Description starts a new transport cipher at nonce 0. Accept only one
+        // for each Select Protocol, so that a key is never used again from nonce 0.
+        if self.state != State::SelectingProtocol {
+            tracing::warn!("Session Description outside of a handshake; ignored");
+            return;
+        }
         let Some(mode) = EncryptionMode::from_name(&description.mode) else {
             self.stop(VoiceFatal::BadSessionDescription(format!(
                 "unknown mode {}",
@@ -669,7 +693,10 @@ impl VoiceCore {
 
         self.mode = Some(mode);
         self.state = State::Active;
+        // Media runs only from here. A resume before this point gives a session with no media.
+        self.identified = true;
         self.session_failures = 0;
+        self.resume_attempts = 0;
         let result = lock_e2ee(&self.e2ee).session_description(
             description.dave_protocol_version,
             self.info.user_id,
@@ -749,19 +776,24 @@ impl VoiceCore {
 
     fn forget_session(&mut self) {
         self.identified = false;
+        self.resume_attempts = 0;
         self.seq_ack = None;
         self.ssrc = None;
         self.mode = None;
     }
 
     fn reconnect(&mut self, kind: ReconnectKind) {
-        let kind = if kind == ReconnectKind::Resume && !self.identified {
-            ReconnectKind::NewSession
-        } else {
-            kind
-        };
+        let mut kind = kind;
+        if kind == ReconnectKind::Resume {
+            self.resume_attempts += 1;
+            if !self.identified || self.resume_attempts > MAX_RESUME_ATTEMPTS {
+                self.forget_session();
+                kind = ReconnectKind::NewSession;
+            }
+        }
+
         let delay = match kind {
-            ReconnectKind::Resume => Duration::ZERO,
+            ReconnectKind::Resume => resume_delay(self.resume_attempts),
             ReconnectKind::NewSession => {
                 self.session_failures += 1;
                 if self.session_failures > MAX_SESSION_FAILURES {
@@ -780,6 +812,15 @@ impl VoiceCore {
         self.next_heartbeat = None;
         self.actions.push_back(VoiceAction::Fatal(error));
     }
+}
+
+/// Gives the delay before a resume: none for the first attempt, then 1 s, 2 s, 4 s, and so on.
+fn resume_delay(attempt: u32) -> Duration {
+    if attempt <= 1 {
+        return Duration::ZERO;
+    }
+    let seconds = 2_u64.saturating_pow(attempt - 2);
+    Duration::from_secs(seconds).min(MAX_RESUME_DELAY)
 }
 
 fn decode<T: DeserializeOwned>(data: serde_json::Value) -> Result<T, serde_json::Error> {
@@ -1279,6 +1320,136 @@ mod tests {
                 "binary 25 [9, 9]".to_owned(),
                 "binary 29 [0, 1, 7]".to_owned(),
             ]
+        );
+    }
+
+    fn session_description(key: &[u8]) -> String {
+        json!({"op":4,"d":{"mode":"aead_aes256_gcm_rtpsize","secret_key":key,"dave_protocol_version":0}})
+            .to_string()
+    }
+
+    /// A new transport cipher starts at nonce 0. A second Session Description with the same
+    /// key must not start one, or the nonces repeat.
+    #[test]
+    fn second_session_description_is_ignored() {
+        let now = Instant::now();
+        let mut core = active_core(shared(NoE2ee), now);
+        let key: Vec<u8> = (0..32).collect();
+        core.received_text(&session_description(&key), now)
+            .expect("valid");
+        assert!(drain(&mut core).is_empty());
+
+        // A second Ready in the same session does not start a new handshake either.
+        core.received_text(
+            r#"{"op":2,"d":{"ssrc":8,"ip":"127.0.0.1","port":1,"modes":["aead_aes256_gcm_rtpsize"]}}"#,
+            now,
+        )
+        .expect("valid");
+        assert!(drain(&mut core).is_empty());
+        core.ip_discovered("1.2.3.4".to_owned(), 5000, now);
+        core.received_text(&session_description(&key), now)
+            .expect("valid");
+        assert!(drain(&mut core).is_empty());
+        assert_eq!(core.ssrc(), Some(7));
+        assert!(core.is_active());
+    }
+
+    /// Without a Session Description, no media runs. A resume would report a ready call
+    /// with no media, so the core identifies again.
+    #[test]
+    fn close_before_session_description_starts_a_new_session() {
+        let now = Instant::now();
+        let mut core = VoiceCore::new(info(), shared(NoE2ee));
+        core.connected(now);
+        core.received_text(r#"{"op":8,"d":{"heartbeat_interval":1000}}"#, now)
+            .expect("valid");
+        core.received_text(
+            r#"{"op":2,"d":{"ssrc":7,"ip":"10.0.0.1","port":1,"modes":["aead_aes256_gcm_rtpsize"]},"seq":1}"#,
+            now,
+        )
+        .expect("valid");
+        drain(&mut core);
+
+        core.closed(None, now);
+        assert_eq!(
+            drain(&mut core),
+            vec![VoiceAction::Reconnect {
+                kind: ReconnectKind::NewSession,
+                delay: Duration::ZERO
+            }]
+        );
+        assert!(!core.will_resume());
+        assert_eq!(core.seq_ack(), -1);
+
+        core.connected(now);
+        core.received_text(r#"{"op":8,"d":{"heartbeat_interval":1000}}"#, now)
+            .expect("valid");
+        let sent = sent_json(&drain(&mut core));
+        assert_eq!(sent[0]["op"], 0);
+
+        // A Resumed that the core did not ask for does not make the session active.
+        core.received_text(r#"{"op":9,"d":null}"#, now)
+            .expect("valid");
+        assert!(!core.is_active());
+        assert!(drain(&mut core).is_empty());
+    }
+
+    /// A server that accepts each resume and then closes the connection again.
+    #[test]
+    fn resume_attempts_have_a_delay_and_a_limit() {
+        let now = Instant::now();
+        let mut core = active_core(shared(NoE2ee), now);
+        let mut delays = Vec::new();
+        for _ in 0..MAX_RESUME_ATTEMPTS {
+            core.closed(Some(4015), now);
+            let actions = drain(&mut core);
+            let [VoiceAction::Reconnect { kind, delay }] = actions.as_slice() else {
+                panic!("one reconnect expected, got {actions:?}");
+            };
+            assert_eq!(*kind, ReconnectKind::Resume);
+            delays.push(delay.as_secs());
+            core.connected(now);
+            core.received_text(r#"{"op":8,"d":{"heartbeat_interval":1000}}"#, now)
+                .expect("valid");
+            assert_eq!(sent_json(&drain(&mut core))[0]["op"], 7);
+        }
+        assert_eq!(delays, vec![0, 1, 2, 4, 8]);
+
+        core.closed(Some(4015), now);
+        assert_eq!(
+            drain(&mut core),
+            vec![VoiceAction::Reconnect {
+                kind: ReconnectKind::NewSession,
+                delay: Duration::ZERO
+            }]
+        );
+        assert!(!core.will_resume());
+    }
+
+    /// A resume that succeeds sets the count of resume attempts to zero.
+    #[test]
+    fn resumed_clears_the_resume_attempts() {
+        let now = Instant::now();
+        let mut core = active_core(shared(NoE2ee), now);
+        for _ in 0..3 {
+            core.closed(Some(4015), now);
+            drain(&mut core);
+            core.connected(now);
+            core.received_text(r#"{"op":8,"d":{"heartbeat_interval":1000}}"#, now)
+                .expect("valid");
+        }
+        core.received_text(r#"{"op":9,"d":null}"#, now)
+            .expect("valid");
+        assert!(core.is_active());
+        drain(&mut core);
+
+        core.closed(Some(4015), now);
+        assert_eq!(
+            drain(&mut core),
+            vec![VoiceAction::Reconnect {
+                kind: ReconnectKind::Resume,
+                delay: Duration::ZERO
+            }]
         );
     }
 

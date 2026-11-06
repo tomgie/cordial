@@ -20,6 +20,11 @@ const HEADER_LEN: usize = 27;
 const FLAG_CONTINUED: u8 = 0x01;
 const FLAG_FIRST: u8 = 0x02;
 const FLAG_LAST: u8 = 0x04;
+/// The largest packet of the packet reader. RFC 7845, section 5.2, permits comment headers
+/// up to this size (for example with cover art).
+const MAX_PACKET_LEN: usize = 125_829_120;
+/// The largest Opus audio packet (RFC 7845, section 6).
+const MAX_AUDIO_PACKET_LEN: usize = 61_440;
 
 /// The CRC-32 of Ogg: polynomial 0x04C11DB7, initial value 0, no reflection, no final XOR.
 const CRC_TABLE: [u32; 256] = crc_table();
@@ -217,10 +222,13 @@ struct PageEnd {
 type Packet = (Vec<u8>, Option<PageEnd>);
 
 /// Reads the packets of the first logical stream of an Ogg file.
+///
+/// A packet larger than 125,829,120 bytes is a format error.
 pub struct OggPacketReader<R> {
     pages: OggPageReader<R>,
     serial: Option<u32>,
     partial: Vec<u8>,
+    max_packet_len: usize,
     packets: VecDeque<Packet>,
     ended: bool,
 }
@@ -242,9 +250,15 @@ impl<R: Read> OggPacketReader<R> {
             pages: OggPageReader::new(reader),
             serial: None,
             partial: Vec::new(),
+            max_packet_len: MAX_PACKET_LEN,
             packets: VecDeque::new(),
             ended: false,
         }
+    }
+
+    /// Sets the largest packet size. A larger packet is a format error.
+    fn set_max_packet_len(&mut self, max_packet_len: usize) {
+        self.max_packet_len = max_packet_len;
     }
 
     /// Reads the next packet. Gives `Ok(None)` at the end of the stream.
@@ -270,7 +284,7 @@ impl<R: Read> OggPacketReader<R> {
                 self.ended = true;
                 continue;
             };
-            self.add_page(&page);
+            self.add_page(&page)?;
         }
     }
 
@@ -307,10 +321,10 @@ impl<R: Read> OggPacketReader<R> {
         }
     }
 
-    fn add_page(&mut self, page: &OggPage) {
+    fn add_page(&mut self, page: &OggPage) -> Result<(), AudioError> {
         let serial = *self.serial.get_or_insert(page.serial);
         if page.serial != serial {
-            return;
+            return Ok(());
         }
         if !page.is_continued() && !self.partial.is_empty() {
             tracing::debug!("an Ogg packet has no end; dropped");
@@ -323,6 +337,13 @@ impl<R: Read> OggPacketReader<R> {
             let end = offset + usize::from(*value);
             self.partial.extend_from_slice(&page.data[offset..end]);
             offset = end;
+            if self.partial.len() > self.max_packet_len {
+                self.partial.clear();
+                return Err(AudioError::Format(format!(
+                    "an Ogg packet is larger than {} bytes",
+                    self.max_packet_len
+                )));
+            }
             if *value < 255 {
                 self.packets
                     .push_back((std::mem::take(&mut self.partial), None));
@@ -340,6 +361,7 @@ impl<R: Read> OggPacketReader<R> {
         if page.is_last() {
             self.ended = true;
         }
+        Ok(())
     }
 }
 
@@ -507,6 +529,7 @@ impl OggOpusSource {
                 "the second Ogg packet is not an Opus comment header".to_owned(),
             ));
         }
+        packets.set_max_packet_len(MAX_AUDIO_PACKET_LEN);
 
         // RFC 7845 makes the audio start on a new page after the comment header.
         let data_start = match packets.pages.get_mut() {
@@ -561,7 +584,8 @@ impl AudioSource for OggOpusSource {
                 opus_packet_samples(&packet).unwrap_or(960)
             };
             let start = self.granule;
-            let end = start + i64::from(samples);
+            // The granule position comes from the file and can be near the maximum.
+            let end = start.saturating_add(i64::from(samples));
             self.granule = end;
 
             let mut discard_end = 0;
@@ -1015,6 +1039,128 @@ pub(crate) mod tests {
         source.seek(Duration::from_millis(30)).expect("seek");
         assert_eq!(next_opus(&mut source), Some((vec![0xFC; 300], 480, 0)));
         assert_eq!(next_opus(&mut source), Some((vec![0xFC, 2], 0, 0)));
+        assert_eq!(next_opus(&mut source), None);
+    }
+
+    fn header_pages() -> Vec<u8> {
+        let mut tags = b"OpusTags".to_vec();
+        tags.extend_from_slice(&[0; 8]);
+        let mut file = OggPage {
+            header_type: FLAG_FIRST,
+            granule_position: 0,
+            serial: 1,
+            sequence: 0,
+            lacing: vec![19],
+            data: OpusHead::encode(2, 0),
+        }
+        .encode();
+        file.extend(
+            OggPage {
+                header_type: 0,
+                granule_position: 0,
+                serial: 1,
+                sequence: 1,
+                lacing: vec![16],
+                data: tags,
+            }
+            .encode(),
+        );
+        file
+    }
+
+    /// A packet that does not end must not fill the memory.
+    #[test]
+    fn oversized_packet_is_an_error() {
+        let mut file = header_pages();
+        for sequence in 2..5 {
+            file.extend(
+                OggPage {
+                    header_type: if sequence == 2 { 0 } else { FLAG_CONTINUED },
+                    granule_position: -1,
+                    serial: 1,
+                    sequence,
+                    lacing: vec![255; 255],
+                    data: vec![0xFC; 255 * 255],
+                }
+                .encode(),
+            );
+        }
+
+        let mut source = OggOpusSource::from_bytes(file).expect("the headers are valid");
+        assert!(matches!(source.next_frame(), Err(AudioError::Format(_))));
+    }
+
+    /// A large comment header (for example with cover art) is valid.
+    #[test]
+    fn large_comment_header_is_valid() {
+        let mut tags = b"OpusTags".to_vec();
+        tags.resize(100_000, 0);
+        let head = OggPage {
+            header_type: FLAG_FIRST,
+            granule_position: 0,
+            serial: 1,
+            sequence: 0,
+            lacing: vec![19],
+            data: OpusHead::encode(2, 0),
+        };
+        let mut file = head.encode();
+        let mut sequence = 1;
+        for (index, chunk) in tags.chunks(255 * 255).enumerate() {
+            let mut lacing = vec![255_u8; chunk.len() / 255];
+            if chunk.len() < 255 * 255 {
+                lacing.push(u8::try_from(chunk.len() % 255).expect("small"));
+            }
+            let flags = if index == 0 { 0 } else { FLAG_CONTINUED };
+            file.extend(
+                OggPage {
+                    header_type: flags,
+                    granule_position: 0,
+                    serial: 1,
+                    sequence,
+                    lacing,
+                    data: chunk.to_vec(),
+                }
+                .encode(),
+            );
+            sequence += 1;
+        }
+        file.extend(
+            OggPage {
+                header_type: FLAG_LAST,
+                granule_position: 960,
+                serial: 1,
+                sequence,
+                lacing: vec![2],
+                data: vec![0xFC, 0],
+            }
+            .encode(),
+        );
+
+        let mut source = OggOpusSource::from_bytes(file).expect("valid");
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 0], 0, 0)));
+    }
+
+    /// A granule position near the maximum must not overflow the sample count.
+    #[test]
+    fn granule_near_the_maximum() {
+        let mut file = header_pages();
+        for (sequence, flags) in [(2, 0), (3, FLAG_LAST)] {
+            file.extend(
+                OggPage {
+                    header_type: flags,
+                    granule_position: i64::MAX,
+                    serial: 1,
+                    sequence,
+                    lacing: vec![2],
+                    data: vec![0xFC, u8::try_from(sequence).expect("small")],
+                }
+                .encode(),
+            );
+        }
+
+        let mut source = OggOpusSource::from_bytes(file).expect("valid");
+        assert!(next_opus(&mut source).is_some());
+        assert!(next_opus(&mut source).is_some());
         assert_eq!(next_opus(&mut source), None);
     }
 

@@ -417,19 +417,39 @@ impl Call {
     /// Connects to a new voice server or session, for example after a channel move.
     pub(crate) fn update_server(&self, info: ConnectionInfo) {
         *lock(&self.shared.info) = info.clone();
-        self.shared.state.send_replace(CallState::Connecting);
-        let _ = self.shared.commands.send(DriverCommand::Connect(info));
+        if self.set_state_unless_stopped(CallState::Connecting) {
+            let _ = self.shared.commands.send(DriverCommand::Connect(info));
+        }
     }
 
     /// Tells the call that the voice server is being moved.
     pub(crate) fn server_lost(&self) {
-        self.shared.state.send_replace(CallState::WaitingForServer);
-        let _ = self.shared.commands.send(DriverCommand::ServerLost);
+        if self.set_state_unless_stopped(CallState::WaitingForServer) {
+            let _ = self.shared.commands.send(DriverCommand::ServerLost);
+        }
     }
 
-    /// Records a new channel after a move.
-    pub(crate) fn set_channel(&self, channel_id: ChannelId) {
-        lock(&self.shared.info).channel_id = channel_id;
+    /// Tells if the call stopped. A stopped call does not connect again.
+    pub(crate) fn is_stopped(&self) -> bool {
+        self.shared.commands.is_closed()
+            || matches!(*self.shared.state.borrow(), CallState::Stopped(_))
+    }
+
+    /// Tells if `other` is a clone of this call.
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.shared, &other.shared)
+    }
+
+    /// Sets the state. Gives `false` and keeps the state when the call stopped: the driver
+    /// does not run anymore, and the stop must stay visible.
+    fn set_state_unless_stopped(&self, state: CallState) -> bool {
+        self.shared.state.send_if_modified(|current| {
+            if matches!(current, CallState::Stopped(_)) {
+                return false;
+            }
+            *current = state;
+            true
+        })
     }
 
     /// Gives the current connection data.

@@ -2,6 +2,28 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.10.1
+
+Fixes in `cordial-voice` from a review of the voice connection.
+
+### Security
+
+- A second Session Description (op 4) with the same key started a new transport cipher at nonce 0. The nonces then repeated with one key (AES-GCM nonce reuse). The core now accepts op 4 (and op 2 Ready) only in the handshake. The driver also continues the nonce counter when a new session gets a key that it used before.
+
+### Fixed
+
+- The manager kept a stopped call, and each later join failed. A join now replaces a stopped call. A stopped call keeps the `Stopped` state; a server update does not change it.
+- A close between Ready and Session Description gave a resume that reported `Ready` with no media. The core now resumes only after a Session Description, and ignores a Resumed that it did not ask for.
+- Resumes had no delay and no limit. A resume that does not reach Resumed now waits (0 s, 1 s, 2 s, 4 s, 8 s). After 5 such attempts, the core starts a new session.
+- A leave while a join waited made a call for a channel that the bot left. The join now gives `JoinError::Left`.
+- A join that timed out left a call that tried to connect for ever. The join now stops the call that it started and removes it from the manager.
+- A stop or a new server during a connection attempt waited for the connect timeout (10 s). The driver now handles commands during the attempt.
+- The SSRC-to-user map kept the users of an old session. A new session clears it.
+- A jitter buffer with fewer packets than its depth waited for ever, and its old packets played before the next audio of the user. Playout now starts after `2 × depth` steps. The jitter buffer of a user who leaves is dropped.
+- A voice server move (null endpoint) during the wait after a failed connection was ignored, and the call connected to the old server.
+- When `VOICE_SERVER_UPDATE` came before `VOICE_STATE_UPDATE` in a move, the call kept the old channel ID. DAVE uses it as the group ID. A channel change now starts a new session (`ConnectionInfo::needs_new_session` compares the channel).
+- The Ogg reader had no limit for a packet. An audio packet larger than 61,440 bytes (RFC 7845) is now a format error. A granule position near `i64::MAX` caused an overflow.
+
 ## 0.10.0
 
 Fixes for the problems that the guide work found.

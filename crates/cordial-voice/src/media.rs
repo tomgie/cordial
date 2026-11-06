@@ -1,6 +1,7 @@
 //! The media tasks: the 20 ms send clock and the receive loop.
 
 use std::hash::{BuildHasher, RandomState};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -30,6 +31,8 @@ const KEEPALIVE_FRAMES: u32 = 250;
 pub(crate) struct SendTask {
     pub(crate) socket: Arc<UdpSocket>,
     pub(crate) cipher: TransportCipher,
+    /// The next nonce of the cipher. A later send task with the same key continues from it.
+    pub(crate) next_nonce: Arc<AtomicU32>,
     pub(crate) ssrc: u32,
     pub(crate) mixer: Arc<Mutex<Mixer>>,
     pub(crate) e2ee: SharedE2ee,
@@ -157,7 +160,11 @@ impl SendTask {
 
     async fn send_packet(&mut self, state: &mut SendState, payload: &[u8], samples: u32) {
         let header = RtpHeader::new(state.sequence, state.timestamp, self.ssrc).encode();
-        match self.cipher.encrypt(&header, payload) {
+        let encrypted = self.cipher.encrypt(&header, payload);
+        // Store before the next await: an abort of the task happens only at an await.
+        self.next_nonce
+            .store(self.cipher.next_nonce(), Ordering::Relaxed);
+        match encrypted {
             Ok(packet) => {
                 if let Err(error) = self.socket.send(&packet).await {
                     tracing::debug!(%error, "cannot send a voice packet");
@@ -219,9 +226,12 @@ fn frame_samples() -> u32 {
 }
 
 /// The receive task: reads the UDP socket and runs the jitter buffers each 20 ms.
+///
+/// `removed` gives the SSRCs of users who left. Their jitter buffers are dropped.
 pub(crate) async fn receive_loop(
     socket: Arc<UdpSocket>,
     mut receiver: Receiver,
+    mut removed: mpsc::UnboundedReceiver<u32>,
     events: broadcast::Sender<VoiceEvent>,
 ) {
     let mut clock = tokio::time::interval(FRAME_DURATION);
@@ -229,6 +239,7 @@ pub(crate) async fn receive_loop(
     let mut buffer = vec![0_u8; 2048];
     loop {
         tokio::select! {
+            Some(ssrc) = removed.recv() => receiver.remove_ssrc(ssrc),
             result = socket.recv(&mut buffer) => match result {
                 Ok(length) => receiver.push_packet(&buffer[..length]),
                 Err(error) => {

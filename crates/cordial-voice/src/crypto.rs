@@ -134,6 +134,11 @@ impl TransportCipher {
         }
     }
 
+    /// Sets the next nonce counter value.
+    pub(crate) fn set_next_nonce(&mut self, nonce: u32) {
+        self.nonce = nonce;
+    }
+
     /// Gives the mode.
     #[must_use]
     pub fn mode(&self) -> EncryptionMode {

@@ -1,6 +1,7 @@
 //! The Tokio driver of a call. It owns the voice WebSocket, the UDP socket, and the media
 //! tasks, and it runs the actions of the [`VoiceCore`].
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -64,12 +65,27 @@ enum Next {
     Stop,
 }
 
+/// The result of a connection attempt.
+enum Opened {
+    Socket(Box<Socket>),
+    Failed,
+    /// A command arrived during the attempt.
+    Command(Effect),
+}
+
 /// The effect of a command.
+#[derive(Clone, Copy)]
 enum Effect {
     None,
     Reconnect,
     WaitServer,
     Stop,
+}
+
+/// The key of the last send task and the next nonce of its cipher.
+struct SendKey {
+    key: SecretKey,
+    next_nonce: Arc<AtomicU32>,
 }
 
 pub(crate) struct Driver {
@@ -81,6 +97,9 @@ pub(crate) struct Driver {
     speaking_receiver: mpsc::Receiver<SpeakingRequest>,
     udp: Option<Arc<UdpSocket>>,
     media: Vec<JoinHandle<()>>,
+    send_key: Option<SendKey>,
+    /// Gives the SSRCs of users who left to the receive task.
+    removed_ssrcs: Option<mpsc::UnboundedSender<u32>>,
     failures: u32,
     fatal: Option<VoiceFatal>,
 }
@@ -108,6 +127,8 @@ impl Driver {
             speaking_receiver,
             udp: None,
             media: Vec::new(),
+            send_key: None,
+            removed_ssrcs: None,
             failures: 0,
             fatal: None,
         }
@@ -131,24 +152,18 @@ impl Driver {
             });
             self.emit(VoiceEvent::Connecting);
 
-            let url = self.core.info().websocket_url();
-            let socket = match tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                tokio_tungstenite::connect_async(url.as_str()),
-            )
-            .await
-            {
-                Ok(Ok((socket, _))) => socket,
-                Ok(Err(error)) => {
-                    tracing::warn!(%error, "voice gateway connection failed");
-                    if !self.wait_after_failure().await {
+            let socket = match self.open().await {
+                Opened::Socket(socket) => *socket,
+                Opened::Failed => {
+                    let effect = self.wait_after_failure().await;
+                    if !after_pause(effect, &mut wait_server) {
                         break;
                     }
                     continue;
                 }
-                Err(_) => {
-                    tracing::warn!("voice gateway connection timed out");
-                    if !self.wait_after_failure().await {
+                // A command stops the attempt. The next loop uses new connection data.
+                Opened::Command(effect) => {
+                    if !after_pause(effect, &mut wait_server) {
                         break;
                     }
                     continue;
@@ -157,8 +172,11 @@ impl Driver {
 
             match self.run_connection(socket).await {
                 Next::Reconnect(delay) => {
-                    if !delay.is_zero() && matches!(self.pause(delay).await, Effect::Stop) {
-                        break;
+                    if !delay.is_zero() {
+                        let effect = self.pause(delay).await;
+                        if !after_pause(effect, &mut wait_server) {
+                            break;
+                        }
                     }
                 }
                 Next::WaitServer(limit) => wait_server = Some(limit),
@@ -172,11 +190,42 @@ impl Driver {
         self.emit(VoiceEvent::Stopped(error));
     }
 
-    /// Waits after a failed connection. Gives `false` when the call must stop.
-    async fn wait_after_failure(&mut self) -> bool {
+    /// Opens the WebSocket connection. Handles commands during the attempt, so that a stop
+    /// does not wait for the connect timeout.
+    async fn open(&mut self) -> Opened {
+        let url = self.core.info().websocket_url();
+        let connect = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            tokio_tungstenite::connect_async(url.as_str()),
+        );
+        tokio::pin!(connect);
+        loop {
+            tokio::select! {
+                result = &mut connect => return match result {
+                    Ok(Ok((socket, _))) => Opened::Socket(Box::new(socket)),
+                    Ok(Err(error)) => {
+                        tracing::warn!(%error, "voice gateway connection failed");
+                        Opened::Failed
+                    }
+                    Err(_) => {
+                        tracing::warn!("voice gateway connection timed out");
+                        Opened::Failed
+                    }
+                },
+                command = self.parts.commands.recv() => match self.apply(command, false) {
+                    Effect::None => {}
+                    effect => return Opened::Command(effect),
+                },
+                request = self.speaking_receiver.recv() => reply(request),
+            }
+        }
+    }
+
+    /// Waits after a failed connection. Gives the effect of the command that ends the wait.
+    async fn wait_after_failure(&mut self) -> Effect {
         self.failures = self.failures.saturating_add(1);
         let seconds = 2_u64.saturating_pow(self.failures.min(5)).min(30);
-        !matches!(self.pause(Duration::from_secs(seconds)).await, Effect::Stop)
+        self.pause(Duration::from_secs(seconds)).await
     }
 
     /// Sleeps and handles commands. Gives the effect of the command that ends the sleep.
@@ -227,6 +276,7 @@ impl Driver {
                     return Effect::None;
                 }
                 self.stop_media();
+                lock(&self.users).clear();
                 self.fatal = None;
                 self.failures = 0;
                 self.core.set_info(info);
@@ -372,6 +422,7 @@ impl Driver {
                 VoiceAction::Reconnect { kind, delay } => {
                     if kind == ReconnectKind::NewSession {
                         self.stop_media();
+                        lock(&self.users).clear();
                     }
                     close(socket, RECONNECT_CLOSE_CODE).await;
                     return Some(Next::Reconnect(delay));
@@ -414,8 +465,24 @@ impl Driver {
                 flags,
             }),
             CoreEvent::ClientsConnect(user_ids) => self.emit(VoiceEvent::ClientsConnect(user_ids)),
+            // The SSRCs of an old session can belong to other users in the new session.
+            CoreEvent::Ready { .. } => lock(&self.users).clear(),
             CoreEvent::ClientDisconnect(user_id) => {
-                lock(&self.users).retain(|_, user| *user != user_id);
+                let ssrcs: Vec<u32> = {
+                    let mut users = lock(&self.users);
+                    let ssrcs = users
+                        .iter()
+                        .filter(|(_, user)| **user == user_id)
+                        .map(|(ssrc, _)| *ssrc)
+                        .collect();
+                    users.retain(|_, user| *user != user_id);
+                    ssrcs
+                };
+                if let Some(removed) = &self.removed_ssrcs {
+                    for ssrc in ssrcs {
+                        let _ = removed.send(ssrc);
+                    }
+                }
                 self.emit(VoiceEvent::ClientDisconnect(user_id));
             }
             CoreEvent::E2eeError(error) => self.emit(VoiceEvent::E2eeError(error)),
@@ -430,12 +497,15 @@ impl Driver {
             tracing::warn!("the session is ready without a UDP socket");
             return;
         };
-        let cipher = TransportCipher::new(mode, key);
+        let next_nonce = self.next_nonce(key);
+        let mut cipher = TransportCipher::new(mode, key);
+        cipher.set_next_nonce(next_nonce.load(Ordering::Relaxed));
         let e2ee = Arc::clone(self.core.e2ee());
 
         let sender = SendTask {
             socket: Arc::clone(&udp),
             cipher: cipher.clone(),
+            next_nonce,
             ssrc,
             mixer: Arc::clone(&self.parts.mixer),
             e2ee: Arc::clone(&e2ee),
@@ -455,18 +525,38 @@ impl Driver {
                 self.config.jitter_depth,
                 self.config.decode,
             );
+            let (removed_sender, removed) = mpsc::unbounded_channel();
+            self.removed_ssrcs = Some(removed_sender);
             self.media.push(tokio::spawn(receive_loop(
                 udp,
                 receiver,
+                removed,
                 self.parts.events.clone(),
             )));
         }
+    }
+
+    /// Gives the nonce counter for a key. A key that was used before continues its counter:
+    /// two ciphers with one key must never use the same nonce.
+    fn next_nonce(&mut self, key: &SecretKey) -> Arc<AtomicU32> {
+        if let Some(previous) = &self.send_key
+            && previous.key == *key
+        {
+            return Arc::clone(&previous.next_nonce);
+        }
+        let next_nonce = Arc::new(AtomicU32::new(0));
+        self.send_key = Some(SendKey {
+            key: key.clone(),
+            next_nonce: Arc::clone(&next_nonce),
+        });
+        next_nonce
     }
 
     fn stop_media(&mut self) {
         for task in self.media.drain(..) {
             task.abort();
         }
+        self.removed_ssrcs = None;
     }
 
     fn set_state(&self, state: CallState) {
@@ -475,6 +565,20 @@ impl Driver {
 
     fn emit(&self, event: VoiceEvent) {
         let _ = self.parts.events.send(event);
+    }
+}
+
+/// Handles the effect of a pause in the connection loop. Gives `false` when the call must
+/// stop.
+fn after_pause(effect: Effect, wait_server: &mut Option<Option<Duration>>) -> bool {
+    match effect {
+        Effect::Stop => false,
+        Effect::WaitServer => {
+            *wait_server = Some(None);
+            true
+        }
+        // New connection data is in the core already: the next loop uses it.
+        Effect::None | Effect::Reconnect => true,
     }
 }
 

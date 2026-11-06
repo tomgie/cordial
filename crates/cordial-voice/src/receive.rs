@@ -47,14 +47,17 @@ pub enum Playout<T> {
 
 /// A jitter buffer: it puts packets in sequence order and finds lost packets.
 ///
-/// Playout starts when the buffer holds `depth` packets. Then each [`JitterBuffer::pop`]
-/// gives the next sequence number: the packet, or `Lost` when it is missing and later
-/// packets wait. When the buffer is empty, the stream is idle and must fill again.
+/// Playout starts when the buffer holds `depth` packets, or after `2 × depth` steps with
+/// fewer packets. Then each [`JitterBuffer::pop`] gives the next sequence number: the
+/// packet, or `Lost` when it is missing and later packets wait. When the buffer is empty,
+/// the stream is idle and must fill again.
 #[derive(Clone, Debug)]
 pub struct JitterBuffer<T> {
     packets: HashMap<u16, T>,
     next: Option<u16>,
     depth: usize,
+    /// The number of steps that the buffer waited with packets but before playout.
+    waited: usize,
 }
 
 impl<T> JitterBuffer<T> {
@@ -65,6 +68,7 @@ impl<T> JitterBuffer<T> {
             packets: HashMap::new(),
             next: None,
             depth: depth.max(1),
+            waited: 0,
         }
     }
 
@@ -110,12 +114,17 @@ impl<T> JitterBuffer<T> {
         let next = match self.next {
             Some(next) => next,
             None => {
-                if self.packets.len() < self.depth {
-                    return Playout::Waiting;
-                }
                 let Some(oldest) = self.oldest() else {
+                    self.waited = 0;
                     return Playout::Waiting;
                 };
+                // A sender that stops before the buffer is full must not leave old packets
+                // that play much later, before its next audio.
+                if self.packets.len() < self.depth && self.waited < self.depth * 2 {
+                    self.waited += 1;
+                    return Playout::Waiting;
+                }
+                self.waited = 0;
                 oldest
             }
         };
@@ -407,6 +416,20 @@ mod tests {
         let steps: Vec<String> = (0..5).map(|_| sequence_of(&buffer.pop())).collect();
         assert_eq!(steps, vec!["10:a", "11:b", "12:lost", "13:d", "idle"]);
         assert_eq!(buffer.pop(), Playout::Waiting);
+    }
+
+    #[test]
+    fn playout_starts_after_a_wait_with_few_packets() {
+        let mut buffer = JitterBuffer::new(3);
+        assert_eq!(buffer.pop(), Playout::Waiting);
+        buffer.push(10, "a");
+        let steps: Vec<String> = (0..8).map(|_| sequence_of(&buffer.pop())).collect();
+        assert_eq!(
+            steps,
+            vec![
+                "waiting", "waiting", "waiting", "waiting", "waiting", "waiting", "10:a", "idle"
+            ]
+        );
     }
 
     #[test]

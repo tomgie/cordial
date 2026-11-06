@@ -1,8 +1,9 @@
 //! Tests of the Tokio driver against a local mock voice server: a WebSocket server and a UDP
 //! socket on 127.0.0.1.
 
+use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chacha20poly1305::XChaCha20Poly1305;
@@ -11,10 +12,11 @@ use cordial_model::gateway::UpdateVoiceState;
 use cordial_model::gateway::event::Event;
 use cordial_model::id::{ChannelId, GuildId, UserId};
 use cordial_voice::audio::ogg::OggOpusWriter;
+use cordial_voice::e2ee::{E2eeError, E2eeOutgoing};
 use cordial_voice::packet::IpDiscovery;
 use cordial_voice::{
-    Call, CallConfig, CallState, ConnectionInfo, GatewayFuture, NoE2ee, OggOpusSource, VoiceEvent,
-    VoiceGateway, VoiceManager,
+    Call, CallConfig, CallError, CallState, ConnectionInfo, E2eeSession, GatewayFuture, JoinError,
+    NoE2ee, OggOpusSource, VoiceEvent, VoiceGateway, VoiceManager,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -186,6 +188,7 @@ struct Received {
     sequence: u16,
     timestamp: u32,
     ssrc: u32,
+    nonce: u32,
     payload: Vec<u8>,
 }
 
@@ -207,6 +210,7 @@ fn decrypt(packet: &[u8]) -> Received {
         sequence: u16::from_be_bytes([header[2], header[3]]),
         timestamp: u32::from_be_bytes([header[4], header[5], header[6], header[7]]),
         ssrc: u32::from_be_bytes([header[8], header[9], header[10], header[11]]),
+        nonce: u32::from_be_bytes(nonce_bytes.try_into().expect("4 bytes")),
         payload,
     }
 }
@@ -680,5 +684,466 @@ async fn received_audio_has_the_user() {
             (15, false)
         ]
     );
+    call.disconnect();
+}
+
+/// Waits for an event that `check` accepts.
+async fn wait_event(
+    events: &mut tokio::sync::broadcast::Receiver<VoiceEvent>,
+    check: impl Fn(&VoiceEvent) -> bool,
+) -> VoiceEvent {
+    timeout(WAIT, async {
+        loop {
+            if let Ok(event) = events.recv().await
+                && check(&event)
+            {
+                return event;
+            }
+        }
+    })
+    .await
+    .expect("the event arrives")
+}
+
+/// Waits until the call is in a state that `check` accepts.
+async fn wait_state(call: &Call, check: impl Fn(&CallState) -> bool) {
+    timeout(WAIT, async {
+        while !check(&call.state()) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the call reaches the state");
+}
+
+fn voice_state(channel_id: ChannelId) -> Event {
+    event(
+        "VOICE_STATE_UPDATE",
+        &json!({"guild_id": GUILD.to_string(), "channel_id": channel_id.to_string(),
+            "user_id": USER.to_string(), "session_id": "session"}),
+    )
+}
+
+fn voice_server(endpoint: Option<&str>) -> Event {
+    event(
+        "VOICE_SERVER_UPDATE",
+        &json!({"token": "token", "guild_id": GUILD.to_string(), "endpoint": endpoint}),
+    )
+}
+
+/// Joins `CHANNEL` through the manager and runs the handshake on `server`.
+async fn join_ready(
+    manager: &VoiceManager,
+    commands: &mut mpsc::UnboundedReceiver<UpdateVoiceState>,
+    server: &MockServer,
+) -> (Call, Server) {
+    let joiner = manager.clone();
+    let join = tokio::spawn(async move { joiner.join(GUILD, CHANNEL).await });
+    timeout(WAIT, commands.recv())
+        .await
+        .expect("op 4 is sent")
+        .expect("open");
+    manager.handle_event(&voice_state(CHANNEL));
+    manager.handle_event(&voice_server(Some(&server.endpoint())));
+
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    let call = timeout(WAIT, join)
+        .await
+        .expect("join ends")
+        .expect("task")
+        .expect("join succeeds");
+    (call, socket)
+}
+
+async fn close_with(socket: &mut Server, code: u16) {
+    let frame = CloseFrame {
+        code: CloseCode::from(code),
+        reason: "".into(),
+    };
+    socket.close(Some(frame)).await.expect("close");
+}
+
+fn receive_cipher() -> cordial_voice::crypto::TransportCipher {
+    cordial_voice::crypto::TransportCipher::new(
+        cordial_voice::EncryptionMode::XChaCha20Poly1305RtpSize,
+        &cordial_voice::crypto::SecretKey::new(KEY),
+    )
+}
+
+/// Sends a silence frame from SSRC 500 to the client.
+async fn send_audio(
+    server: &MockServer,
+    cipher: &mut cordial_voice::crypto::TransportCipher,
+    client: SocketAddr,
+    sequence: u16,
+) {
+    let header =
+        cordial_voice::packet::RtpHeader::new(sequence, u32::from(sequence) * 960, 500).encode();
+    let packet = cipher
+        .encrypt(&header, &[0xF8, 0xFF, 0xFE])
+        .expect("encrypt");
+    server.udp.send_to(&packet, client).await.expect("send");
+}
+
+/// Plays two packets and gives the nonces of the packets and of the silence after them.
+async fn play_and_collect_nonces(call: &Call, server: &MockServer) -> Vec<u32> {
+    let audio = vec![vec![0xFC, 1], vec![0xFC, 2]];
+    call.play(OggOpusSource::from_bytes(ogg_file(&audio)).expect("valid Ogg"));
+    let packets = receive_packets(&server.udp, audio.len() + 5).await;
+    packets.iter().map(|packet| packet.nonce).collect()
+}
+
+fn assert_unique(nonces: &[u32]) {
+    let unique: HashSet<u32> = nonces.iter().copied().collect();
+    assert_eq!(unique.len(), nonces.len(), "a nonce repeats: {nonces:?}");
+}
+
+/// A call that stopped is not used again: a later join makes a new call.
+#[tokio::test]
+async fn manager_replaces_a_stopped_call() {
+    let server = MockServer::start().await;
+    let (sent, mut commands) = mpsc::unbounded_channel();
+    let manager = VoiceManager::without_e2ee(FakeGateway { sent });
+    manager.set_user_id(USER);
+    let (first, mut socket) = join_ready(&manager, &mut commands, &server).await;
+
+    close_with(&mut socket, 4022).await;
+    wait_state(&first, |state| matches!(state, CallState::Stopped(_))).await;
+
+    let (second, _socket) = join_ready(&manager, &mut commands, &server).await;
+    assert_eq!(second.state(), CallState::Ready);
+    assert!(matches!(first.state(), CallState::Stopped(_)));
+    assert_eq!(
+        manager.call(GUILD).map(|call| call.state()),
+        Some(CallState::Ready)
+    );
+}
+
+/// A second Session Description with the same key does not start the nonce at 0 again.
+#[tokio::test]
+async fn second_session_description_keeps_the_nonce() {
+    let server = MockServer::start().await;
+    let call = Call::connect(
+        info(server.endpoint()),
+        CallConfig::default(),
+        Box::new(NoE2ee::default()),
+    );
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("ready");
+    let mut nonces = play_and_collect_nonces(&call, &server).await;
+
+    send(
+        &mut socket,
+        json!({"op": 4, "seq": 3, "d": {
+            "mode": "aead_xchacha20_poly1305_rtpsize",
+            "secret_key": KEY,
+            "dave_protocol_version": 0
+        }}),
+    )
+    .await;
+    // The driver reads the frame before the next track starts.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    nonces.extend(play_and_collect_nonces(&call, &server).await);
+    assert_unique(&nonces);
+    call.disconnect();
+}
+
+/// A new session that gets the same key again continues the nonce counter.
+#[tokio::test]
+async fn new_session_with_the_same_key_keeps_the_nonce() {
+    let server = MockServer::start().await;
+    let call = Call::connect(
+        info(server.endpoint()),
+        CallConfig::default(),
+        Box::new(NoE2ee::default()),
+    );
+    let mut events = call.subscribe();
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("ready");
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::Ready { .. })
+    })
+    .await;
+    let mut nonces = play_and_collect_nonces(&call, &server).await;
+
+    close_with(&mut socket, 4006).await;
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::Ready { .. })
+    })
+    .await;
+    let _messages = record(socket);
+
+    nonces.extend(play_and_collect_nonces(&call, &server).await);
+    assert_unique(&nonces);
+    call.disconnect();
+}
+
+/// The bot leaves after the voice events arrive and before the join starts the call.
+#[tokio::test]
+async fn leave_during_join_gives_left() {
+    let server = MockServer::start().await;
+    let (sent, mut commands) = mpsc::unbounded_channel();
+    let manager = VoiceManager::without_e2ee(FakeGateway { sent });
+    manager.set_user_id(USER);
+
+    let joiner = manager.clone();
+    let join = tokio::spawn(async move { joiner.join(GUILD, CHANNEL).await });
+    commands.recv().await.expect("op 4");
+    // The test runtime has one thread: the join task does not run until the test waits.
+    // Thus the leave comes after the events and before the join starts the call.
+    manager.handle_event(&voice_state(CHANNEL));
+    manager.handle_event(&voice_server(Some(&server.endpoint())));
+    manager.leave(GUILD).await.expect("leave");
+
+    let result = timeout(WAIT, join).await.expect("join ends").expect("task");
+    assert_eq!(result.err(), Some(JoinError::Left));
+    assert!(manager.call(GUILD).is_none());
+}
+
+/// A join that times out stops its call and removes it from the manager.
+#[tokio::test]
+async fn join_timeout_stops_the_call() {
+    let server = MockServer::start().await;
+    let (sent, mut commands) = mpsc::unbounded_channel();
+    let config = CallConfig::default().timeout(Duration::from_millis(500));
+    let manager =
+        VoiceManager::with_e2ee(FakeGateway { sent }, config, || Box::new(NoE2ee::default()));
+    manager.set_user_id(USER);
+
+    let joiner = manager.clone();
+    let join = tokio::spawn(async move { joiner.join(GUILD, CHANNEL).await });
+    commands.recv().await.expect("op 4");
+    manager.handle_event(&voice_state(CHANNEL));
+    manager.handle_event(&voice_server(Some(&server.endpoint())));
+    let call = timeout(WAIT, async {
+        loop {
+            if let Some(call) = manager.call(GUILD) {
+                return call;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the join starts a call");
+
+    // The server does not answer the WebSocket handshake.
+    let result = timeout(WAIT, join).await.expect("join ends").expect("task");
+    assert_eq!(result.err(), Some(JoinError::Call(CallError::Timeout)));
+    assert!(manager.call(GUILD).is_none());
+    wait_state(&call, |state| matches!(state, CallState::Stopped(_))).await;
+}
+
+/// The SSRC of a user in an old session does not name the sender in a new session.
+#[tokio::test]
+async fn new_session_clears_the_ssrc_map() {
+    let server = MockServer::start().await;
+    let call = Call::connect(
+        info(server.endpoint()),
+        CallConfig::default().receive(true),
+        Box::new(NoE2ee::default()),
+    );
+    let mut events = call.subscribe();
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("ready");
+    send(
+        &mut socket,
+        json!({"op": 5, "seq": 3, "d": {"user_id": "77", "ssrc": 500, "speaking": 1}}),
+    )
+    .await;
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::Speaking { .. })
+    })
+    .await;
+
+    close_with(&mut socket, 4006).await;
+    let mut socket = server.accept().await;
+    let client = server.handshake(&mut socket).await;
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::Ready { .. })
+    })
+    .await;
+    let _messages = record(socket);
+
+    let mut cipher = receive_cipher();
+    for sequence in [10_u16, 11, 12] {
+        send_audio(&server, &mut cipher, client, sequence).await;
+    }
+    let VoiceEvent::Audio(data) =
+        wait_event(&mut events, |event| matches!(event, VoiceEvent::Audio(_))).await
+    else {
+        unreachable!("the check accepts only audio");
+    };
+    assert_eq!(data.ssrc, 500);
+    assert_eq!(data.user_id, None);
+    call.disconnect();
+}
+
+/// The packets of a user who left do not play later.
+#[tokio::test]
+async fn client_disconnect_drops_the_jitter_buffer() {
+    let server = MockServer::start().await;
+    let mut config = CallConfig::default().receive(true);
+    // A deep buffer waits long before playout: the test has time to see the drop.
+    config.jitter_depth = 20;
+    let call = Call::connect(info(server.endpoint()), config, Box::new(NoE2ee::default()));
+    let mut events = call.subscribe();
+    let mut socket = server.accept().await;
+    let client = server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("ready");
+    send(
+        &mut socket,
+        json!({"op": 5, "seq": 3, "d": {"user_id": "77", "ssrc": 500, "speaking": 1}}),
+    )
+    .await;
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::Speaking { .. })
+    })
+    .await;
+
+    send_audio(&server, &mut receive_cipher(), client, 10).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    send(
+        &mut socket,
+        json!({"op": 13, "seq": 4, "d": {"user_id": "77"}}),
+    )
+    .await;
+    wait_event(&mut events, |event| {
+        matches!(event, VoiceEvent::ClientDisconnect(_))
+    })
+    .await;
+    let _messages = record(socket);
+
+    // Without the drop, playout starts after 40 ticks (800 ms) with the one packet.
+    let audio = timeout(Duration::from_millis(1500), async {
+        loop {
+            if let Ok(VoiceEvent::Audio(data)) = events.recv().await {
+                return data;
+            }
+        }
+    })
+    .await;
+    assert!(audio.is_err(), "audio of a user who left: {audio:?}");
+    call.disconnect();
+}
+
+/// The voice server moves while the call waits after a failed connection. The call waits
+/// for the new server and does not connect to the old one.
+#[tokio::test]
+async fn server_lost_during_a_pause_waits_for_the_server() {
+    let server = MockServer::start().await;
+    let (sent, mut commands) = mpsc::unbounded_channel();
+    let manager = VoiceManager::without_e2ee(FakeGateway { sent });
+    manager.set_user_id(USER);
+    let (call, mut socket) = join_ready(&manager, &mut commands, &server).await;
+
+    // The resume connection fails: the driver waits before the next attempt.
+    close_with(&mut socket, 4015).await;
+    let (stream, _) = timeout(WAIT, server.listener.accept())
+        .await
+        .expect("the client connects again")
+        .expect("accept");
+    drop(stream);
+    manager.handle_event(&voice_server(None));
+
+    let again = timeout(Duration::from_millis(1000), server.listener.accept()).await;
+    assert!(again.is_err(), "the call connected to the old server");
+    assert_eq!(call.state(), CallState::WaitingForServer);
+
+    manager.handle_event(&voice_server(Some(&server.endpoint())));
+    let mut socket = server.accept().await;
+    server.handshake(&mut socket).await;
+    call.wait_ready(WAIT)
+        .await
+        .expect("ready on the new server");
+    call.disconnect();
+}
+
+/// An E2EE session that records the channel of each Session Description.
+struct ChannelRecorder {
+    channels: Arc<Mutex<Vec<ChannelId>>>,
+}
+
+impl E2eeSession for ChannelRecorder {
+    fn max_protocol_version(&self) -> u16 {
+        0
+    }
+
+    fn session_description(
+        &mut self,
+        _protocol_version: u16,
+        _own_user_id: UserId,
+        channel_id: ChannelId,
+    ) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        self.channels.lock().expect("lock").push(channel_id);
+        Ok(Vec::new())
+    }
+
+    fn clients_connect(&mut self, _user_ids: &[UserId]) {}
+
+    fn client_disconnect(&mut self, _user_id: UserId) {}
+
+    fn json_message(
+        &mut self,
+        _op: u8,
+        _data: &serde_json::Value,
+    ) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        Ok(Vec::new())
+    }
+
+    fn binary_message(&mut self, _op: u8, _payload: &[u8]) -> Result<Vec<E2eeOutgoing>, E2eeError> {
+        Ok(Vec::new())
+    }
+
+    fn encrypt(&mut self, opus_frame: &[u8]) -> Result<Vec<u8>, E2eeError> {
+        Ok(opus_frame.to_vec())
+    }
+
+    fn decrypt(&mut self, _sender: UserId, frame: &[u8]) -> Result<Vec<u8>, E2eeError> {
+        Ok(frame.to_vec())
+    }
+}
+
+/// In a move, VOICE_SERVER_UPDATE can come before VOICE_STATE_UPDATE. The E2EE session
+/// must get the new channel, because DAVE uses it as the group ID.
+#[tokio::test]
+async fn server_update_before_state_update_uses_the_new_channel() {
+    let first_server = MockServer::start().await;
+    let second_server = MockServer::start().await;
+    let (sent, mut commands) = mpsc::unbounded_channel();
+    let channels = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&channels);
+    let manager = VoiceManager::with_e2ee(FakeGateway { sent }, CallConfig::default(), move || {
+        Box::new(ChannelRecorder {
+            channels: Arc::clone(&recorded),
+        })
+    });
+    manager.set_user_id(USER);
+    let (call, _socket) = join_ready(&manager, &mut commands, &first_server).await;
+
+    // A moderator moves the bot, and the server update comes first.
+    let other_channel = ChannelId::new_const(555);
+    manager.handle_event(&voice_server(Some(&second_server.endpoint())));
+    let mut socket = second_server.accept().await;
+    second_server.handshake(&mut socket).await;
+    manager.handle_event(&voice_state(other_channel));
+
+    let mut socket = second_server.accept().await;
+    second_server.handshake(&mut socket).await;
+    call.wait_ready(WAIT).await.expect("ready");
+    timeout(WAIT, async {
+        while channels.lock().expect("lock").last() != Some(&other_channel) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the E2EE session gets the new channel");
+    assert_eq!(call.channel_id(), other_channel);
     call.disconnect();
 }

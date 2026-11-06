@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use cordial_gateway::{Command, ShardHandle, shard_id_for_guild};
@@ -108,6 +109,8 @@ pub type E2eeFactory = dyn Fn() -> Box<dyn E2eeSession> + Send + Sync;
 
 #[derive(Default)]
 struct GuildVoice {
+    /// A number that is new each time the entry is made. A join checks it to find a leave.
+    generation: u64,
     session_id: Option<String>,
     channel_id: Option<ChannelId>,
     token: Option<String>,
@@ -120,8 +123,23 @@ struct ManagerInner {
     gateway: Box<dyn VoiceGateway>,
     user_id: Mutex<Option<UserId>>,
     guilds: Mutex<HashMap<GuildId, GuildVoice>>,
+    generations: AtomicU64,
     config: CallConfig,
     e2ee: Box<E2eeFactory>,
+}
+
+impl ManagerInner {
+    /// Gives the entry of a guild. Makes it, with a new generation, when it is not there.
+    fn guild<'a>(
+        &self,
+        guilds: &'a mut HashMap<GuildId, GuildVoice>,
+        guild_id: GuildId,
+    ) -> &'a mut GuildVoice {
+        guilds.entry(guild_id).or_insert_with(|| GuildVoice {
+            generation: self.generations.fetch_add(1, Ordering::Relaxed),
+            ..GuildVoice::default()
+        })
+    }
 }
 
 /// Joins and leaves voice channels, and keeps one [`Call`] for each guild. It is cheap to
@@ -190,6 +208,7 @@ impl VoiceManager {
                 gateway: Box::new(gateway),
                 user_id: Mutex::new(None),
                 guilds: Mutex::new(HashMap::new()),
+                generations: AtomicU64::new(0),
                 config,
                 e2ee: Box::new(e2ee),
             }),
@@ -247,18 +266,16 @@ impl VoiceManager {
             return;
         };
 
-        let guild = guilds.entry(guild_id).or_default();
+        // The call gets the new channel through `complete`: a new channel needs a new session.
+        let guild = self.inner.guild(&mut guilds, guild_id);
         guild.session_id = Some(session_id.to_owned());
         guild.channel_id = Some(channel_id);
-        if let Some(call) = &guild.call {
-            call.set_channel(channel_id);
-        }
         self.complete(guild_id, guild);
     }
 
     fn on_voice_server(&self, guild_id: GuildId, token: &str, endpoint: Option<&str>) {
         let mut guilds = lock(&self.inner.guilds);
-        let guild = guilds.entry(guild_id).or_default();
+        let guild = self.inner.guild(&mut guilds, guild_id);
         guild.token = Some(token.to_owned());
         guild.endpoint = endpoint.map(ToOwned::to_owned);
         if endpoint.is_none() {
@@ -287,6 +304,10 @@ impl VoiceManager {
         };
         let info = ConnectionInfo::new(guild_id, channel_id, user_id, session_id, token, endpoint);
 
+        if guild.call.as_ref().is_some_and(Call::is_stopped) {
+            // A stopped call does not connect again. The next join makes a new call.
+            guild.call = None;
+        }
         if let Some(call) = &guild.call
             && (call.info().needs_new_session(&info)
                 || call.state() == crate::CallState::WaitingForServer)
@@ -311,9 +332,12 @@ impl VoiceManager {
         }
         let config = &self.inner.config;
         let (sender, receiver) = oneshot::channel();
-        {
+        let generation = {
             let mut guilds = lock(&self.inner.guilds);
-            let guild = guilds.entry(guild_id).or_default();
+            let guild = self.inner.guild(&mut guilds, guild_id);
+            if guild.call.as_ref().is_some_and(Call::is_stopped) {
+                guild.call = None;
+            }
             if let Some(call) = &guild.call
                 && guild.channel_id == Some(channel_id)
                 && call.state() == crate::CallState::Ready
@@ -325,7 +349,8 @@ impl VoiceManager {
             guild.token = None;
             guild.endpoint = None;
             guild.waiters.push(sender);
-        }
+            guild.generation
+        };
 
         let update = UpdateVoiceState::new(
             guild_id,
@@ -344,20 +369,47 @@ impl VoiceManager {
             .map_err(|_| JoinError::Timeout)?
             .map_err(|_| JoinError::Left)?;
 
-        let call = {
+        let (call, created) = {
             let mut guilds = lock(&self.inner.guilds);
-            let guild = guilds.entry(guild_id).or_default();
+            // A leave (or a disconnect) while the join waited removed the entry. A new entry
+            // has a new generation.
+            let Some(guild) = guilds
+                .get_mut(&guild_id)
+                .filter(|guild| guild.generation == generation)
+            else {
+                return Err(JoinError::Left);
+            };
             match &guild.call {
-                Some(call) => call.clone(),
-                None => {
+                Some(call) if !call.is_stopped() => (call.clone(), false),
+                _ => {
                     let call = Call::connect(info, config.clone(), (self.inner.e2ee)());
                     guild.call = Some(call.clone());
-                    call
+                    (call, true)
                 }
             }
         };
-        call.wait_ready(config.timeout).await?;
+
+        if let Err(error) = call.wait_ready(config.timeout).await {
+            // Without this, a call that cannot connect tries again for ever.
+            if created {
+                self.forget_call(guild_id, &call);
+            }
+            return Err(error.into());
+        }
         Ok(call)
+    }
+
+    /// Stops a call and removes it from the manager, if the manager still has it.
+    fn forget_call(&self, guild_id: GuildId, call: &Call) {
+        if let Some(guild) = lock(&self.inner.guilds).get_mut(&guild_id)
+            && guild
+                .call
+                .as_ref()
+                .is_some_and(|current| current.same(call))
+        {
+            guild.call = None;
+        }
+        call.disconnect();
     }
 
     /// Leaves the voice channel of a guild and stops its call.

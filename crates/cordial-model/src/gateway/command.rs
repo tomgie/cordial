@@ -49,6 +49,49 @@ pub struct Identify {
     pub capabilities: Capabilities,
 }
 
+impl Identify {
+    /// Makes an Identify payload for one shard.
+    #[must_use]
+    pub fn new(
+        token: impl Into<String>,
+        properties: IdentifyProperties,
+        intents: Intents,
+        shard: [u32; 2],
+    ) -> Self {
+        Self {
+            token: token.into(),
+            properties,
+            compress: false,
+            large_threshold: None,
+            shard: Some(shard),
+            presence: None,
+            intents,
+            capabilities: Capabilities::empty(),
+        }
+    }
+
+    /// Sets the member count above which Discord does not send offline members (50 to 250).
+    #[must_use]
+    pub fn large_threshold(mut self, threshold: Option<u8>) -> Self {
+        self.large_threshold = threshold;
+        self
+    }
+
+    /// Sets the initial presence.
+    #[must_use]
+    pub fn presence(mut self, presence: Option<UpdatePresence>) -> Self {
+        self.presence = presence;
+        self
+    }
+
+    /// Sets the capabilities.
+    #[must_use]
+    pub fn capabilities(mut self, capabilities: Capabilities) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+}
+
 /// The connection properties of Identify.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -91,6 +134,18 @@ pub struct Resume {
     pub session_id: String,
     /// The last sequence number that was received.
     pub seq: u64,
+}
+
+impl Resume {
+    /// Makes a Resume payload.
+    #[must_use]
+    pub fn new(token: impl Into<String>, session_id: impl Into<String>, seq: u64) -> Self {
+        Self {
+            token: token.into(),
+            session_id: session_id.into(),
+            seq,
+        }
+    }
 }
 
 /// The Update Presence payload (opcode 3).

@@ -9,9 +9,28 @@ categories.workspace = true
 keywords.workspace = true
 authors.workspace = true
 
+[features]
+default = ["zlib"]
+# Transport compression `zlib-stream` (pure Rust).
+zlib = ["dep:flate2"]
+# Transport compression `zstd-stream` (C library).
+zstd = ["dep:zstd"]
+
 [dependencies]
 cordial-model.workspace = true
 cordial-http.workspace = true
+flate2 = { workspace = true, optional = true }
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "net"] }
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+zstd = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util", "net"] }
 
 [lints]
 workspace = true

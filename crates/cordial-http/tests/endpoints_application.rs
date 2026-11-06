@@ -486,6 +486,25 @@ async fn edits_global_command_without_type() {
 }
 
 #[tokio::test]
+async fn edit_sends_values_that_clear_old_values() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::json(200, &command_json()));
+
+    client(&transport)
+        .edit_global_command(
+            APPLICATION,
+            COMMAND,
+            CommandDefinition::chat_input("blep", "Send a blep"),
+        )
+        .await
+        .unwrap();
+
+    let body = only_request(&transport).json();
+    assert_eq!(body["nsfw"], json!(false));
+    assert_eq!(body["options"], json!([]));
+}
+
+#[tokio::test]
 async fn deletes_global_command() {
     let transport = FakeTransport::new();
     transport.push(FakeResponse::empty(204));

@@ -40,6 +40,21 @@ pub struct MessagePayload {
     pub poll: Option<PollCreate>,
 }
 
+impl From<cordial_model::interaction::InteractionMessage> for MessagePayload {
+    fn from(message: cordial_model::interaction::InteractionMessage) -> Self {
+        Self {
+            content: message.content,
+            tts: message.tts,
+            embeds: message.embeds,
+            allowed_mentions: message.allowed_mentions,
+            components: message.components,
+            attachments: message.attachments,
+            flags: message.flags,
+            poll: message.poll,
+        }
+    }
+}
+
 impl MessagePayload {
     /// Runs the client-side checks.
     ///
@@ -181,6 +196,12 @@ macro_rules! message_setters {
             attachments: Vec<cordial_model::message::AttachmentRequest>,
         ) -> Self {
             self.payload.attachments = Some(attachments);
+            self
+        }
+
+        /// Replaces all message fields with a payload. Files stay.
+        pub fn payload(mut self, payload: crate::payload::MessagePayload) -> Self {
+            self.payload = payload;
             self
         }
     };

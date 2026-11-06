@@ -202,7 +202,7 @@ impl CommandArg for Attachment {
 #[non_exhaustive]
 pub enum Mentionable {
     /// A user.
-    User(ResolvedUser),
+    User(Box<ResolvedUser>),
     /// A role.
     Role(Role),
 }
@@ -215,6 +215,6 @@ impl CommandArg for Mentionable {
         if let Some(role) = resolved.and_then(|resolved| resolved.roles.get(&id.cast())) {
             return Ok(Self::Role(role.clone()));
         }
-        ResolvedUser::resolve(id.cast(), resolved).map(Self::User)
+        ResolvedUser::resolve(id.cast(), resolved).map(|user| Self::User(Box::new(user)))
     }
 }

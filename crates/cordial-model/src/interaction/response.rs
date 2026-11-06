@@ -173,6 +173,24 @@ pub struct InteractionMessage {
     pub poll: Option<PollCreate>,
 }
 
+impl From<&str> for InteractionMessage {
+    fn from(content: &str) -> Self {
+        Self::text(content)
+    }
+}
+
+impl From<String> for InteractionMessage {
+    fn from(content: String) -> Self {
+        Self::text(content)
+    }
+}
+
+impl From<Embed> for InteractionMessage {
+    fn from(embed: Embed) -> Self {
+        Self::new().embed(embed)
+    }
+}
+
 impl InteractionMessage {
     /// Makes an empty message.
     #[must_use]

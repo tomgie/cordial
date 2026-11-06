@@ -429,21 +429,6 @@ fn edit_definition(local: &CommandDefinition, remote: &Command) -> CommandDefini
         remote.description_localizations.as_ref(),
     );
 
-    // The edit request of `cordial-http` does not send `nsfw: false` or an empty option list.
-    // Discord then keeps the old value, and each later sync plans the same update.
-    if !definition.nsfw && remote.nsfw {
-        tracing::warn!(
-            command = %definition.name,
-            "an edit cannot clear `nsfw`; delete the command and create it again"
-        );
-    }
-    if definition.options.is_empty() && !remote.options.is_empty() {
-        tracing::warn!(
-            command = %definition.name,
-            "an edit cannot remove all options; delete the command and create it again"
-        );
-    }
-
     definition
 }
 

@@ -36,12 +36,12 @@ struct CommandBody<'a> {
     description: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     description_localizations: Option<&'a Localizations>,
-    #[serde(skip_serializing_if = "<[_]>::is_empty")]
-    options: &'a [CommandOption],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<&'a [CommandOption]>,
     #[serde(skip_serializing_if = "Patch::is_keep")]
     default_member_permissions: Patch<Permissions>,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    nsfw: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nsfw: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     integration_types: Option<&'a [ApplicationIntegrationType]>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,16 +52,22 @@ struct CommandBody<'a> {
 
 impl<'a> CommandBody<'a> {
     /// Makes the body. An edit request does not send the type, because Discord cannot change it.
+    ///
+    /// An edit keeps each field that it does not send. Thus an edit always sends `nsfw`, and
+    /// the options of a slash command, so that `false` and an empty list clear the old values.
     fn new(definition: &'a CommandDefinition, with_type: bool) -> Self {
+        let is_edit = !with_type;
+        let send_options = !definition.options.is_empty()
+            || (is_edit && definition.kind == CommandType::ChatInput);
         Self {
             kind: with_type.then_some(definition.kind),
             name: &definition.name,
             name_localizations: definition.name_localizations.as_ref(),
             description: &definition.description,
             description_localizations: definition.description_localizations.as_ref(),
-            options: &definition.options,
+            options: send_options.then_some(definition.options.as_slice()),
             default_member_permissions: definition.default_member_permissions,
-            nsfw: definition.nsfw,
+            nsfw: (is_edit || definition.nsfw).then_some(definition.nsfw),
             integration_types: definition.integration_types.as_deref(),
             contexts: definition.contexts.as_deref(),
             handler: definition.handler,

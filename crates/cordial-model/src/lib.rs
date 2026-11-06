@@ -14,6 +14,8 @@
 mod macros;
 
 pub mod application;
+pub mod audit_log;
+pub mod auto_moderation;
 pub mod channel;
 pub mod color;
 pub mod command;
@@ -25,6 +27,7 @@ pub mod id;
 pub mod image;
 pub mod interaction;
 pub mod invite;
+pub mod lobby;
 pub mod locale;
 pub mod message;
 pub mod monetization;
@@ -34,6 +37,7 @@ pub mod permissions;
 pub mod poll;
 pub mod scheduled_event;
 pub mod serde_util;
+pub mod soundboard;
 pub mod sticker;
 pub mod time;
 pub mod user;

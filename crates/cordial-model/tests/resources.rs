@@ -77,3 +77,22 @@ fn monetization() {
     assert_round_trip::<Entitlement>("resources/entitlement/get-entitlement");
     assert_round_trip::<Subscription>("resources/subscription/subscription-example");
 }
+
+#[test]
+fn moderation_and_social() {
+    use cordial_model::auto_moderation::AutoModerationRule;
+    use cordial_model::guild::Integration;
+    use cordial_model::lobby::{ApplicationIdentityProfile, Lobby};
+    use cordial_model::soundboard::SoundboardSound;
+
+    assert_round_trip::<AutoModerationRule>(
+        "resources/auto-moderation/example-auto-moderation-rule",
+    );
+    assert_round_trip::<Integration>("resources/audit-log/example-partial-integration-object");
+    assert_round_trip::<SoundboardSound>("resources/soundboard/example-default-soundboard-sound");
+    assert_round_trip::<SoundboardSound>("resources/soundboard/example-guild-soundboard-sound");
+    assert_round_trip::<Lobby>("resources/lobby/example-lobby-object");
+    assert_round_trip::<ApplicationIdentityProfile>(
+        "resources/application-identity-profile/example-application-identity-profile-object",
+    );
+}

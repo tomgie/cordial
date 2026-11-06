@@ -58,6 +58,9 @@ pub struct Integration {
     /// The application of a Discord integration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub application: Option<IntegrationApplication>,
+    /// The application ID. Only in the partial integrations of audit logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application_id: Option<ApplicationId>,
     /// The OAuth2 scopes that the application has.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scopes: Option<Vec<Scope>>,

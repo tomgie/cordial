@@ -173,6 +173,90 @@ pub struct InteractionMessage {
     pub poll: Option<PollCreate>,
 }
 
+impl InteractionMessage {
+    /// Makes an empty message.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Makes a message with text content.
+    #[must_use]
+    pub fn text(content: impl Into<String>) -> Self {
+        Self::new().content(content)
+    }
+
+    /// Sets the text content.
+    #[must_use]
+    pub fn content(mut self, content: impl Into<String>) -> Self {
+        self.content = Some(content.into());
+        self
+    }
+
+    /// Adds an embed (up to 10).
+    #[must_use]
+    pub fn embed(mut self, embed: Embed) -> Self {
+        self.embeds.get_or_insert_with(Vec::new).push(embed);
+        self
+    }
+
+    /// Adds a component.
+    #[must_use]
+    pub fn component(mut self, component: impl Into<Component>) -> Self {
+        self.components
+            .get_or_insert_with(Vec::new)
+            .push(component.into());
+        self
+    }
+
+    /// Sets the allowed mentions.
+    #[must_use]
+    pub fn allowed_mentions(mut self, allowed_mentions: AllowedMentions) -> Self {
+        self.allowed_mentions = Some(allowed_mentions);
+        self
+    }
+
+    /// Adds message flags.
+    #[must_use]
+    pub fn flags(mut self, flags: MessageFlags) -> Self {
+        self.flags = Some(self.flags.unwrap_or_default() | flags);
+        self
+    }
+
+    /// Makes the message visible only to the user of the interaction.
+    #[must_use]
+    pub fn ephemeral(self) -> Self {
+        self.flags(MessageFlags::EPHEMERAL)
+    }
+
+    /// Uses Components V2: the message has only components, no content or embeds.
+    #[must_use]
+    pub fn components_v2(self) -> Self {
+        self.flags(MessageFlags::IS_COMPONENTS_V2)
+    }
+
+    /// Sets the attachment entries for files in a multipart request.
+    #[must_use]
+    pub fn attachments(mut self, attachments: Vec<AttachmentRequest>) -> Self {
+        self.attachments = Some(attachments);
+        self
+    }
+
+    /// Sets a poll.
+    #[must_use]
+    pub fn poll(mut self, poll: PollCreate) -> Self {
+        self.poll = Some(poll);
+        self
+    }
+
+    /// Sets whether the message is text-to-speech.
+    #[must_use]
+    pub fn tts(mut self, tts: bool) -> Self {
+        self.tts = Some(tts);
+        self
+    }
+}
+
 /// The choices of an autocomplete response.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[non_exhaustive]

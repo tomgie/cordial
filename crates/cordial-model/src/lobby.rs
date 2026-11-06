@@ -55,6 +55,9 @@ crate::discord_flags! {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct ApplicationIdentity {
+    /// The user ID, in responses that list identities of a user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<UserId>,
     /// The provider type of the external account.
     pub provider_type: String,
     /// An identifier that tells identities of one provider apart.

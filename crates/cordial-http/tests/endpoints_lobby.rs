@@ -551,9 +551,9 @@ async fn gets_user_application_identities() {
         .unwrap();
 
     let first = &identities.identities[0];
-    assert_eq!(first.user_id, USER);
-    assert_eq!(first.identity.provider_type, "STEAM");
-    assert_eq!(first.identity.provider_id.as_deref(), Some("app-1"));
+    assert_eq!(first.user_id, Some(USER));
+    assert_eq!(first.provider_type, "STEAM");
+    assert_eq!(first.provider_id.as_deref(), Some("app-1"));
     let request = only_request(&transport);
     assert_request(
         &request,

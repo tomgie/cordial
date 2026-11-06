@@ -20,24 +20,13 @@ pub const DYNAMIC_FIELD_COUNT_LIMIT: usize = 30;
 /// The maximum number of characters in the username of a profile.
 pub const PROFILE_USERNAME_LIMIT: usize = 1024;
 
-/// An application identity with the Discord user that it belongs to.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[non_exhaustive]
-pub struct UserApplicationIdentity {
-    /// The Discord user.
-    pub user_id: UserId,
-    /// The identity in the external system.
-    #[serde(flatten)]
-    pub identity: ApplicationIdentity,
-}
-
 /// A list of application identities.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct ApplicationIdentities {
     /// The identities. The list is empty when no identity matches.
     #[serde(default)]
-    pub identities: Vec<UserApplicationIdentity>,
+    pub identities: Vec<ApplicationIdentity>,
 }
 
 /// `PATCH /applications/{application_id}/users/{user_id}/identities/{provider_issued_user_id}/profile`:

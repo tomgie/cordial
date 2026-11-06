@@ -29,40 +29,40 @@ no encoder: the bot sends their packets as they are. Only Ogg Opus packets that 
 Discord encrypts the audio in voice channels end to end with the DAVE protocol. DAVE is
 mandatory. A call without DAVE ends with close code 4017.
 
-`DaveSession` implements DAVE. Give the voice manager a factory that makes one session for
-each call:
-
-```rust
-VoiceManager::with_e2ee(shards, CallConfig::default(), || {
-    Box::new(DaveSession::new().expect("the DAVE key pair is made")) as Box<dyn E2eeSession>
-})
-```
-
-`VoiceManager::new` uses no end-to-end encryption. Use it only for tests.
+`DaveSession` implements DAVE. `VoiceManager::new` and `BotBuilder::voice` use it for each
+call. `VoiceManager::without_e2ee` has no end-to-end encryption: use it only for tests with
+a local voice server.
 
 ## The voice manager
 
-`VoiceManager` joins and leaves voice channels. It keeps one `Call` for each guild. It
-needs these gateway events:
+`VoiceManager` joins and leaves voice channels. It keeps one `Call` for each guild.
+
+With the framework, call `BotBuilder::voice` (facade feature `voice`). The bot then:
+
+1. Makes the manager when the shards start, with DAVE.
+2. Requests the `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE` events.
+3. Gives each voice event to the manager.
+
+Handlers get the manager with `ctx.voice()`.
+
+```rust
+{{#include ../../../crates/cordial/tests/guide/voice.rs:bot}}
+```
+
+The `GUILD_VOICE_STATES` intent enables the voice events. The intent check adds it, because
+the bot requests the events.
+
+Without the framework, make the manager yourself and give it the events:
 
 | Event | Use |
 |---|---|
 | `READY` | The user ID of the bot. `set_user_id` also sets it. |
-| `VOICE_STATE_UPDATE` | The voice session of the bot. Needs the `GUILD_VOICE_STATES` intent. |
+| `VOICE_STATE_UPDATE` | The voice session of the bot. |
 | `VOICE_SERVER_UPDATE` | The voice server and its token. |
 
 Give each event to `VoiceManager::handle_event`. The manager ignores the other events.
-
-The manager sends Update Voice State through the main gateway. It needs the shard handles,
-and they exist only after the bot starts. Thus the example makes the manager in the
-`READY` handler:
-
-```rust
-{{#include ../../../crates/cordial/tests/guide/voice.rs:manager}}
-```
-
-A `Vec<ShardHandle>` routes each guild to its shard. It computes the shard from the
-length of the list, so give it all shards of the bot.
+For many shards, use `ShardHandles::new(handles, total_count)`. The total count is
+necessary, because a process can run only some shards of the bot.
 
 ## Join and play
 

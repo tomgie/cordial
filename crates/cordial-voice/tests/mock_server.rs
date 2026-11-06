@@ -480,7 +480,7 @@ fn event(name: &str, data: &Value) -> Event {
 async fn manager_joins_and_leaves() {
     let server = MockServer::start().await;
     let (sent, mut commands) = mpsc::unbounded_channel();
-    let manager = VoiceManager::new(FakeGateway { sent });
+    let manager = VoiceManager::without_e2ee(FakeGateway { sent });
     manager.handle_event(&event(
         "VOICE_STATE_UPDATE",
         &json!({"guild_id": GUILD.to_string(), "channel_id": CHANNEL.to_string(),
@@ -548,7 +548,7 @@ async fn manager_moves_the_call() {
     let first_server = MockServer::start().await;
     let second_server = MockServer::start().await;
     let (sent, mut commands) = mpsc::unbounded_channel();
-    let manager = VoiceManager::new(FakeGateway { sent });
+    let manager = VoiceManager::without_e2ee(FakeGateway { sent });
     manager.set_user_id(USER);
 
     let joiner = manager.clone();

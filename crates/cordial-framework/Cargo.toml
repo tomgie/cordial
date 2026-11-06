@@ -13,9 +13,12 @@ authors.workspace = true
 default = []
 # Receive interactions over HTTP in place of the gateway.
 endpoint = ["dep:cordial-endpoint"]
+# A voice manager in the context (`BotBuilder::voice`, `Context::voice`).
+voice = ["dep:cordial-voice"]
 
 [dependencies]
 cordial-endpoint = { workspace = true, optional = true }
+cordial-voice = { workspace = true, optional = true }
 cordial-model.workspace = true
 cordial-http.workspace = true
 cordial-gateway.workspace = true

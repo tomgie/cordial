@@ -176,6 +176,15 @@ fn warn_message_content(events: EventTypes, intents: Intents) {
     }
 }
 
+/// Gives a message for close code 4013 (invalid intents).
+pub(crate) fn invalid_message(intents: Intents) -> String {
+    format!(
+        "Discord does not accept the intents value {intents:?} (bits {}); check the intents \
+         that you set with BotBuilder::intents",
+        intents.bits()
+    )
+}
+
 /// Gives a message for close code 4014 (disallowed intents).
 pub(crate) fn disallowed_message(intents: Intents, flags: ApplicationFlags) -> String {
     let not_enabled = intents.privileged() - enabled_privileged(flags);

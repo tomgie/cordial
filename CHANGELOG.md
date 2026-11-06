@@ -2,6 +2,34 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.10.0
+
+Fixes for the problems that the guide work found.
+
+### Added
+
+- `BotBuilder::voice` and `Context::voice`: the bot makes a voice manager with DAVE when the shards start, and gives it the voice events.
+- `cordial_voice::ShardHandles`: shard handles with the total shard count of the bot.
+- `VoiceManager::without_e2ee`, for tests with a local voice server.
+- `BotBuilder::gateway`: change the shard manager settings, for example a shared identify queue, the compression, or the large threshold.
+- `Reply::file`: a reply with files, for each response state.
+- The facade features `opus` and `symphonia`.
+- A clear message for close code 4013 (invalid intents).
+
+### Changed
+
+- `VoiceManager::new` uses DAVE end-to-end encryption. Discord needs it.
+- `BotBuilder::autocomplete::<C>(handler)` needs no placeholders for the handler type (new trait `AutocompleteHandler`).
+- `BotBuilder::cache_messages` adds the `MESSAGE` resource to the cache.
+
+### Removed
+
+- `impl VoiceGateway for Vec<ShardHandle>`. It used the number of handles as the shard count, which is wrong when a process runs only some shards. Use `ShardHandles`.
+
+### Fixed
+
+- The derive macros work in the doctests of `cordial-framework` and `cordial` without a `crate = ...` attribute.
+
 ## 0.9.2
 
 ### Fixed

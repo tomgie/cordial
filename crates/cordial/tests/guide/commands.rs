@@ -187,7 +187,7 @@ fn with_autocomplete(token: Token) -> Result<Bot<()>, Error> {
     Bot::builder(token)
         .command(pick_color)
         // The command type cannot come from the handler, so name it.
-        .autocomplete::<PickColor, _, _>(color_choices)
+        .autocomplete::<PickColor>(color_choices)
         .build()
 }
 // ANCHOR_END: autocomplete

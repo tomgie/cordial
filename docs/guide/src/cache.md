@@ -117,6 +117,5 @@ the buffer is full, a new message removes the oldest message.
   limit, it removes the tenth of the buffers with the oldest last message. DM channels
   get no delete event, so without a limit each new DM adds a buffer.
 
-`cache_messages` alone turns on the cache with only the `MESSAGE` resource. After
-`cache(...)`, it changes only the size. Put `ResourceTypes::MESSAGE` in `cache(...)` to
-keep messages and other resources.
+`cache_messages` adds the `MESSAGE` resource to the cache. Alone, it turns on a cache with
+only that resource.

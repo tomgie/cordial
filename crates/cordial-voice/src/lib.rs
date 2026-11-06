@@ -75,6 +75,8 @@ pub use call::{Call, CallConfig, CallError, CallState, VoiceEvent};
 pub use core::ConnectionInfo;
 pub use dave::DaveSession;
 pub use e2ee::{E2eeSession, NoE2ee};
-pub use manager::{E2eeFactory, GatewayFuture, JoinError, VoiceGateway, VoiceManager};
+pub use manager::{
+    E2eeFactory, GatewayFuture, JoinError, ShardHandles, VoiceGateway, VoiceManager,
+};
 pub use protocol::{EncryptionMode, SpeakingFlags, VoiceCloseCode};
 pub use receive::VoiceData;

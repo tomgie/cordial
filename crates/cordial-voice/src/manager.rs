@@ -26,8 +26,8 @@ pub type GatewayFuture<'a> = Pin<Box<dyn Future<Output = Result<(), String>> + S
 
 /// The main gateway connection that sends Update Voice State (opcode 4).
 ///
-/// It is implemented for one [`ShardHandle`] and for a list of shard handles (one for each
-/// shard, routed by guild).
+/// It is implemented for one [`ShardHandle`] and for [`ShardHandles`] (many shards, routed
+/// by guild).
 pub trait VoiceGateway: Send + Sync + 'static {
     /// Sends Update Voice State for the guild of `update`.
     fn update_voice_state(&self, update: UpdateVoiceState) -> GatewayFuture<'_>;
@@ -43,12 +43,33 @@ impl VoiceGateway for ShardHandle {
     }
 }
 
-impl VoiceGateway for Vec<ShardHandle> {
+/// The shard handles of a process, with the total shard count of the bot.
+///
+/// The count is necessary because a process can run only some shards: the shard of a guild
+/// comes from the total count, not from the number of handles.
+#[derive(Clone, Debug)]
+pub struct ShardHandles {
+    shards: Vec<ShardHandle>,
+    count: u32,
+}
+
+impl ShardHandles {
+    /// Makes the list from the handles and the total shard count of the bot.
+    #[must_use]
+    pub fn new(shards: Vec<ShardHandle>, count: u32) -> Self {
+        Self {
+            shards,
+            count: count.max(1),
+        }
+    }
+}
+
+impl VoiceGateway for ShardHandles {
     fn update_voice_state(&self, update: UpdateVoiceState) -> GatewayFuture<'_> {
         Box::pin(async move {
-            let count = u32::try_from(self.len()).map_err(|error| error.to_string())?;
-            let shard_id = shard_id_for_guild(update.guild_id, count.max(1));
+            let shard_id = shard_id_for_guild(update.guild_id, self.count);
             let shard = self
+                .shards
                 .iter()
                 .find(|shard| shard.id() == shard_id)
                 .ok_or_else(|| format!("no handle for shard {shard_id}"))?;
@@ -140,12 +161,18 @@ impl fmt::Debug for VoiceManager {
 }
 
 impl VoiceManager {
-    /// Makes a manager with the default call settings and no E2EE.
+    /// Makes a manager with the default call settings and DAVE end-to-end encryption.
     ///
-    /// Discord needs DAVE E2EE in voice channels (close code 4017). Set an E2EE session
-    /// factory with [`VoiceManager::with_e2ee`].
+    /// Discord needs DAVE in voice channels (close code 4017).
     #[must_use]
     pub fn new(gateway: impl VoiceGateway) -> Self {
+        Self::with_e2ee(gateway, CallConfig::default(), dave_session)
+    }
+
+    /// Makes a manager with no end-to-end encryption. Discord closes such calls with code
+    /// 4017, so use it only for tests with a local voice server.
+    #[must_use]
+    pub fn without_e2ee(gateway: impl VoiceGateway) -> Self {
         Self::with_e2ee(gateway, CallConfig::default(), || {
             Box::new(NoE2ee::default())
         })
@@ -349,5 +376,18 @@ impl VoiceManager {
             .update_voice_state(update)
             .await
             .map_err(JoinError::Gateway)
+    }
+}
+
+/// Makes a DAVE session for a new call.
+fn dave_session() -> Box<dyn E2eeSession> {
+    match crate::dave::DaveSession::new() {
+        Ok(session) => Box::new(session),
+        Err(error) => {
+            // Only a failure of the crypto setup gets here. The call then fails with close
+            // code 4017, which names the problem.
+            tracing::error!(%error, "cannot make a DAVE session; the call has no E2EE");
+            Box::new(NoE2ee::default())
+        }
     }
 }

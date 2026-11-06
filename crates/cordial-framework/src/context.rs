@@ -39,6 +39,8 @@ pub(crate) struct Shared<S> {
     /// The response trackers of interactions that a collector took. The collector context
     /// uses the same tracker as the HTTP source, which waits for the response.
     pub(crate) trackers: DashMap<InteractionId, (Instant, Arc<ResponseTracker>)>,
+    #[cfg(feature = "voice")]
+    pub(crate) voice: OnceLock<cordial_voice::VoiceManager>,
     pub(crate) shutdown: watch::Sender<bool>,
 }
 
@@ -96,6 +98,8 @@ impl<S: Send + Sync + 'static> Context<S> {
                 event_types: OnceLock::new(),
                 collectors: Collectors::default(),
                 trackers: DashMap::new(),
+                #[cfg(feature = "voice")]
+                voice: OnceLock::new(),
                 shutdown,
             }),
         }
@@ -162,6 +166,14 @@ impl<S: Send + Sync + 'static> Context<S> {
     #[must_use]
     pub fn shards(&self) -> Vec<ShardHandle> {
         self.read_shards().clone()
+    }
+
+    /// Gives the voice manager. It exists after the shards start, when the bot has
+    /// [`BotBuilder::voice`](crate::BotBuilder::voice).
+    #[cfg(feature = "voice")]
+    #[must_use]
+    pub fn voice(&self) -> Option<&cordial_voice::VoiceManager> {
+        self.shared.voice.get()
     }
 
     /// Stops the bot. `Bot::run` returns after the shards close.

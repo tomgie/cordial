@@ -5,7 +5,9 @@ use std::future::Future;
 use std::sync::Arc;
 
 use cordial_cache::{Cache, ResourceTypes};
-use cordial_gateway::{FatalError, Session, ShardEvent, ShardManager, ShardMessage, ShardRange};
+use cordial_gateway::{
+    FatalError, Session, ShardEvent, ShardManager, ShardManagerBuilder, ShardMessage, ShardRange,
+};
 use cordial_http::{Client, Token};
 use cordial_model::application::ApplicationFlags;
 use cordial_model::command::CommandOptionChoice;
@@ -30,6 +32,33 @@ use crate::router::{
     BoxFuture, CommandEntry, CommandScope, EventHandler, Focused, PatternEntry, Router,
 };
 use crate::sync::{SyncCommand, SyncOptions, SyncScope};
+
+/// The settings hook of [`BotBuilder::gateway`].
+type GatewaySettings = Arc<dyn Fn(ShardManagerBuilder) -> ShardManagerBuilder + Send + Sync>;
+
+/// An autocomplete handler: an async function that gives the choices.
+pub trait AutocompleteHandler<S>: Send + Sync + 'static {
+    /// Runs the handler.
+    fn call(
+        &self,
+        context: CommandContext<S>,
+        focused: Focused,
+    ) -> BoxFuture<Vec<CommandOptionChoice>>;
+}
+
+impl<S, F, Fut> AutocompleteHandler<S> for F
+where
+    F: Fn(CommandContext<S>, Focused) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Vec<CommandOptionChoice>> + Send + 'static,
+{
+    fn call(
+        &self,
+        context: CommandContext<S>,
+        focused: Focused,
+    ) -> BoxFuture<Vec<CommandOptionChoice>> {
+        Box::pin(self(context, focused))
+    }
+}
 
 /// How the bot orders the event handlers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -184,6 +213,8 @@ pub struct BotBuilder<S> {
     event_order: EventOrder,
     shutdown_mode: ShutdownMode,
     ctrl_c: bool,
+    voice: bool,
+    gateway: Option<GatewaySettings>,
     shards: ShardRange,
     presence: Option<UpdatePresence>,
     sessions: HashMap<u32, Session>,
@@ -238,6 +269,8 @@ pub struct Bot<S> {
     event_order: EventOrder,
     shutdown_mode: ShutdownMode,
     ctrl_c: bool,
+    voice: bool,
+    gateway: Option<GatewaySettings>,
     shards: ShardRange,
     presence: Option<UpdatePresence>,
     sessions: HashMap<u32, Session>,
@@ -271,6 +304,8 @@ impl Bot<()> {
             event_order: EventOrder::default(),
             shutdown_mode: ShutdownMode::default(),
             ctrl_c: true,
+            voice: false,
+            gateway: None,
             shards: ShardRange::Recommended,
             presence: None,
             sessions: HashMap::new(),
@@ -307,6 +342,8 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
             event_order: self.event_order,
             shutdown_mode: self.shutdown_mode,
             ctrl_c: self.ctrl_c,
+            voice: self.voice,
+            gateway: self.gateway,
             shards: self.shards,
             presence: self.presence,
             sessions: self.sessions,
@@ -316,7 +353,8 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
         }
     }
 
-    /// Uses an HTTP client with custom settings. Its token must be the bot token.
+    /// Uses an HTTP client with custom settings. Its token must be the bot token. The bot then
+    /// uses the token of the client, not the token of [`Bot::builder`].
     #[must_use]
     pub fn http(mut self, client: Client) -> Self {
         self.http = Some(client);
@@ -349,9 +387,9 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
     /// Sets the number of messages that the cache keeps for each channel.
     #[must_use]
     pub fn cache_messages(mut self, capacity: usize) -> Self {
-        let resources = self
-            .cache
-            .map_or(ResourceTypes::MESSAGE, |(resources, _)| resources);
+        let resources = self.cache.map_or(ResourceTypes::MESSAGE, |(resources, _)| {
+            resources | ResourceTypes::MESSAGE
+        });
         self.cache = Some((resources, capacity));
         self
     }
@@ -395,6 +433,36 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
     #[must_use]
     pub fn stop_on_ctrl_c(mut self, enabled: bool) -> Self {
         self.ctrl_c = enabled;
+        self
+    }
+
+    /// Turns on the voice manager. The bot makes it when the shards start, with DAVE
+    /// end-to-end encryption, and gives it the voice events. Get it with
+    /// [`Context::voice`].
+    #[cfg(feature = "voice")]
+    #[must_use]
+    pub fn voice(mut self) -> Self {
+        self.voice = true;
+        self
+    }
+
+    /// Changes the shard manager settings before the shards start, for example the
+    /// compression, a shared identify queue for many processes, or the large threshold.
+    ///
+    /// ```no_run
+    /// # use cordial_framework::Bot;
+    /// # use cordial_gateway::Compression;
+    /// # let token = cordial_http::Token::bot("abc");
+    /// let bot = Bot::builder(token)
+    ///     .gateway(|builder| builder.compression(Compression::Zlib).large_threshold(100))
+    ///     .build();
+    /// ```
+    #[must_use]
+    pub fn gateway(
+        mut self,
+        configure: impl Fn(ShardManagerBuilder) -> ShardManagerBuilder + Send + Sync + 'static,
+    ) -> Self {
+        self.gateway = Some(Arc::new(configure));
         self
     }
 
@@ -579,15 +647,14 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
 
     /// Adds the autocomplete handler of a command. It gives the choices (up to 25).
     #[must_use]
-    pub fn autocomplete<C, F, Fut>(mut self, handler: F) -> Self
-    where
-        C: Command,
-        F: Fn(CommandContext<S>, Focused) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Vec<CommandOptionChoice>> + Send + 'static,
-    {
+    ///
+    /// Write `.autocomplete::<MyCommand>(handler)`. The handler is an async function
+    /// `(CommandContext<S>, Focused) -> Vec<CommandOptionChoice>`.
+    pub fn autocomplete<C: Command>(mut self, handler: impl AutocompleteHandler<S>) -> Self {
+        let handler = Arc::new(handler);
         self.router.autocomplete.insert(
             C::NAME.to_owned(),
-            Arc::new(move |context, focused| Box::pin(handler(context, focused))),
+            Arc::new(move |context, focused| handler.call(context, focused)),
         );
         self
     }
@@ -690,6 +757,8 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
             event_order: self.event_order,
             shutdown_mode: self.shutdown_mode,
             ctrl_c: self.ctrl_c,
+            voice: self.voice,
+            gateway: self.gateway,
             shards: self.shards,
             presence: self.presence,
             sessions: self.sessions,
@@ -787,6 +856,10 @@ impl<S: Send + Sync + 'static> Bot<S> {
             types.extend_from(resources.event_types());
         }
         types.insert(EventType::Ready);
+        if self.voice {
+            types.insert(EventType::VoiceStateUpdate);
+            types.insert(EventType::VoiceServerUpdate);
+        }
         types
     }
 
@@ -816,6 +889,9 @@ impl<S: Send + Sync + 'static> Bot<S> {
         if let Some(presence) = self.presence.clone() {
             builder = builder.presence(presence);
         }
+        if let Some(configure) = &self.gateway {
+            builder = configure(builder);
+        }
         let mut manager = builder.start().await?;
         *self
             .context
@@ -828,6 +904,16 @@ impl<S: Send + Sync + 'static> Bot<S> {
             .shard_count
             .store(manager.shard_count(), std::sync::atomic::Ordering::Relaxed);
         let _ = self.context.shared.event_types.set(events);
+        #[cfg(feature = "voice")]
+        if self.voice {
+            let handles =
+                cordial_voice::ShardHandles::new(manager.shards().to_vec(), manager.shard_count());
+            let _ = self
+                .context
+                .shared
+                .voice
+                .set(cordial_voice::VoiceManager::new(handles));
+        }
 
         let result = self.event_loop(&mut manager, intents, flags).await;
 
@@ -874,10 +960,10 @@ impl<S: Send + Sync + 'static> Bot<S> {
                     self.dispatch(shard_id, event, &mut workers);
                 }
                 ShardEvent::Fatal(FatalError::Closed { code }) => {
-                    let message = if code == 4014 {
-                        intents::disallowed_message(intents, flags)
-                    } else {
-                        FatalError::Closed { code }.to_string()
+                    let message = match code {
+                        4013 => intents::invalid_message(intents),
+                        4014 => intents::disallowed_message(intents, flags),
+                        _ => FatalError::Closed { code }.to_string(),
                     };
                     return Err(Error::ShardFatal { shard_id, message });
                 }
@@ -903,6 +989,10 @@ impl<S: Send + Sync + 'static> Bot<S> {
     ) {
         if let Some(cache) = self.context.cache() {
             cache.update(&event);
+        }
+        #[cfg(feature = "voice")]
+        if let Some(voice) = self.context.voice() {
+            voice.handle_event(&event);
         }
 
         match InteractionCreate::from_event_ref(&event) {

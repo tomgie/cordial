@@ -19,7 +19,6 @@ use crate::command::ParseError;
 /// /// The feedback form.
 /// #[derive(Modal)]
 /// #[modal(title = "Feedback")]
-/// # #[modal(crate = "cordial_framework")]
 /// struct Feedback {
 ///     #[field(label = "Subject", max_length = 80)]
 ///     subject: String,

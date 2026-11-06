@@ -74,8 +74,9 @@ Things to know:
 
 - Each process has its own cache, collectors, and state. Data that all processes need must
   be in an external store.
-- The framework uses a local identify queue in each process. Start the processes one after
-  the other, or use `ShardManager` with a shared identify queue.
+- The framework uses a local identify queue in each process. To share one queue between
+  the processes, set it with `BotBuilder::gateway(|builder| builder.identify_queue(queue))`.
+  `gateway` also sets the compression, the large threshold, and the event buffer.
 - Interactions arrive on the shard of their guild. A DM interaction arrives on shard 0.
 
 ## Session start limits

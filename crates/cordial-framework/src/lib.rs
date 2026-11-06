@@ -21,7 +21,6 @@
 //! #[derive(Command)]
 //! #[command(name = "ping", description = "Check that the bot is online")]
 //! # // A doctest of this crate needs the path: the macro sees the crate itself.
-//! # #[command(crate = "cordial_framework")]
 //! struct Ping;
 //!
 //! async fn ping(ctx: CommandContext<()>, _: Ping) -> Result<(), BoxError> {
@@ -37,6 +36,13 @@
 //! # Ok(())
 //! # }
 //! ```
+
+// The derive macros use the path `::cordial_framework`, also inside this crate.
+#[allow(
+    unused_extern_crates,
+    reason = "the derive macros need this name, also when the crate does not use them"
+)]
+extern crate self as cordial_framework;
 
 mod bot;
 pub mod check;
@@ -55,7 +61,8 @@ mod router;
 pub mod sync;
 
 pub use bot::{
-    Bot, BotBuilder, CommandSettings, CommandSync, EventOrder, RunOutcome, ShutdownMode,
+    AutocompleteHandler, Bot, BotBuilder, CommandSettings, CommandSync, EventOrder, RunOutcome,
+    ShutdownMode,
 };
 pub use check::{Check, CheckFailure, Cooldown, CooldownScope};
 pub use command::{Command, CommandArg, CommandOptions, CommandTarget, ParseError};

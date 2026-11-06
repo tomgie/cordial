@@ -129,9 +129,8 @@ The client sends a multipart request when a request has files.
 
 - Refer to a file in an embed as `attachment://<filename>`.
 - `content_type` sets the media type, for example `audio/ogg` for a voice message.
-- The `reply` and `followup` methods of the framework cannot carry files. For a file in a
-  follow-up message, call `ctx.http().create_followup(...)` with `.file(...)`. The
-  interaction token is `ctx.interaction().token.expose()`.
+- In the framework, add a file to a reply with `ctx.reply("text").file(FileUpload::new(..))`.
+  The reply sends it with the correct request for the response state.
 
 Images for icons, avatars, banners, and emojis use `ImageData`, a data URI.
 `ImageData::from_bytes` finds the media type from the first bytes.

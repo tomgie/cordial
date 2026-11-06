@@ -45,7 +45,6 @@ pub trait CommandOptions: Sized {
 /// /// Bans a member.
 /// #[derive(Command)]
 /// #[command(name = "ban", description = "Ban a member", default_member_permissions = "BAN_MEMBERS")]
-/// # #[command(crate = "cordial_framework")]
 /// struct Ban {
 ///     #[option(description = "The reason, for the audit log", max_length = 512)]
 ///     reason: Option<String>,

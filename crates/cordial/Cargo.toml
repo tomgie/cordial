@@ -20,7 +20,11 @@ macros = ["dep:cordial-macros"]
 endpoint = ["dep:cordial-endpoint", "cordial-framework?/endpoint"]
 # An `axum` router for the endpoint.
 axum = ["endpoint", "cordial-endpoint/axum"]
-voice = ["gateway", "dep:cordial-voice"]
+voice = ["gateway", "dep:cordial-voice", "cordial-framework?/voice"]
+# Opus encode and decode with libopus (needs CMake and a C compiler). Needed to send PCM.
+opus = ["voice", "cordial-voice/opus"]
+# Decode MP3, FLAC, WAV, Vorbis, and AAC files.
+symphonia = ["voice", "cordial-voice/symphonia"]
 
 [dependencies]
 cordial-model.workspace = true

@@ -10,7 +10,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
-use cordial_http::MessagePayload;
+use cordial_http::{FileUpload, MessagePayload};
 use cordial_model::Permissions;
 use cordial_model::command::CommandOptionChoice;
 use cordial_model::gateway::event::InteractionCreate;
@@ -251,6 +251,7 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
         Reply {
             context: self,
             message: message.into(),
+            files: Vec::new(),
         }
     }
 
@@ -471,6 +472,21 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
         self.interaction.token.expose().to_owned()
     }
 
+    async fn send_followup(
+        &self,
+        message: InteractionMessage,
+        files: Vec<FileUpload>,
+    ) -> Result<Message, cordial_http::Error> {
+        let mut request = self
+            .http()
+            .create_followup(self.interaction.application_id, self.token())
+            .payload(MessagePayload::from(message));
+        for file in files {
+            request = request.file(file);
+        }
+        request.await
+    }
+
     async fn initial(&self, response: InteractionResponse) -> Result<(), cordial_http::Error> {
         self.http()
             .create_interaction_response(self.interaction.id, self.token(), response)
@@ -489,11 +505,23 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
         self.tracker.acknowledged.send_replace(true);
     }
 
-    async fn send_reply(&self, message: InteractionMessage) -> Result<(), ResponseError> {
+    async fn send_reply(
+        &self,
+        message: InteractionMessage,
+        files: Vec<FileUpload>,
+    ) -> Result<(), ResponseError> {
         let mut state = self.tracker.state.lock().await;
         match *state {
             ResponseState::Pending => {
-                self.initial(InteractionResponse::message(message)).await?;
+                let mut request = self.http().create_interaction_response(
+                    self.interaction.id,
+                    self.token(),
+                    InteractionResponse::message(message),
+                );
+                for file in files {
+                    request = request.file(file);
+                }
+                request.await?;
                 self.mark_acknowledged();
             }
             ResponseState::Deferred { ephemeral } => {
@@ -504,7 +532,17 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
                     // The defer already set the ephemeral flag. An edit cannot change it.
                     let mut payload = MessagePayload::from(message);
                     payload.flags = payload.flags.map(|flags| flags - MessageFlags::EPHEMERAL);
-                    self.edit_original(payload).await?;
+                    let mut request = self
+                        .http()
+                        .edit_original_interaction_response(
+                            self.interaction.application_id,
+                            self.token(),
+                        )
+                        .payload(payload);
+                    for file in files {
+                        request = request.file(file);
+                    }
+                    request.await?;
                 } else {
                     // The defer has the other visibility, for example an automatic public
                     // defer before an ephemeral reply. Replace the loading message, so that
@@ -515,17 +553,11 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
                             self.token(),
                         )
                         .await?;
-                    self.http()
-                        .create_followup(self.interaction.application_id, self.token())
-                        .payload(MessagePayload::from(message))
-                        .await?;
+                    self.send_followup(message, files).await?;
                 }
             }
             ResponseState::DeferredUpdate | ResponseState::Updated | ResponseState::Responded => {
-                self.http()
-                    .create_followup(self.interaction.application_id, self.token())
-                    .payload(MessagePayload::from(message))
-                    .await?;
+                self.send_followup(message, files).await?;
             }
         }
         *state = ResponseState::Responded;
@@ -538,6 +570,7 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
 pub struct Reply<'a, S> {
     context: &'a InteractionContext<S>,
     message: InteractionMessage,
+    files: Vec<FileUpload>,
 }
 
 impl<S> std::fmt::Debug for Reply<'_, S> {
@@ -561,6 +594,12 @@ impl<S> Reply<'_, S> {
         self.message = edit(self.message);
         self
     }
+
+    /// Adds a file. Refer to it in an embed as `attachment://<filename>`.
+    pub fn file(mut self, file: FileUpload) -> Self {
+        self.files.push(file);
+        self
+    }
 }
 
 impl<'a, S: Send + Sync + 'static> IntoFuture for Reply<'a, S> {
@@ -568,7 +607,7 @@ impl<'a, S: Send + Sync + 'static> IntoFuture for Reply<'a, S> {
     type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        Box::pin(self.context.send_reply(self.message))
+        Box::pin(self.context.send_reply(self.message, self.files))
     }
 }
 

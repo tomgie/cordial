@@ -461,3 +461,26 @@ fn long_cooldown_does_not_panic() {
     assert!(cooldown.try_use(&context).is_ok());
     assert!(cooldown.try_use(&context).is_err());
 }
+
+#[tokio::test]
+async fn reply_with_a_file_is_multipart() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    let bot = start(builder(&transport).command::<Ping, _, _, _>(
+        |ctx: CommandContext<()>, _| async move {
+            ctx.reply("Here")
+                .file(cordial_http::FileUpload::new("a.txt", b"abc".to_vec()))
+                .await
+        },
+    ));
+
+    dispatch(&bot, command("ping"));
+
+    let requests = requests(&transport, 1).await;
+    assert_eq!(requests[0].url, callback_path());
+    let content_type = requests[0].header("content-type").unwrap_or_default();
+    assert!(
+        content_type.starts_with("multipart/form-data"),
+        "{content_type}"
+    );
+}

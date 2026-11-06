@@ -31,7 +31,9 @@ impl Paths {
 /// `framework` feature off.
 fn find_framework() -> TokenStream {
     match crate_name("cordial-framework") {
-        Ok(FoundCrate::Itself) => return quote!(crate),
+        // The framework names itself with `extern crate self`, so that this path also works
+        // in its doctests, which are separate crates.
+        Ok(FoundCrate::Itself) => return quote!(::cordial_framework),
         Ok(FoundCrate::Name(name)) => {
             let ident = Ident::new(&name, Span::call_site());
             return quote!(::#ident);
@@ -40,7 +42,8 @@ fn find_framework() -> TokenStream {
     }
 
     match crate_name("cordial") {
-        Ok(FoundCrate::Itself) => quote!(crate::framework),
+        // Inside the facade, only its doctests use the macros. They link the facade by name.
+        Ok(FoundCrate::Itself) => quote!(::cordial::framework),
         Ok(FoundCrate::Name(name)) => {
             let ident = Ident::new(&name, Span::call_site());
             quote!(::#ident::framework)

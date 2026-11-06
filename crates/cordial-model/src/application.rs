@@ -362,6 +362,26 @@ pub struct RoleConnectionMetadata {
     pub description_localizations: Option<Localizations>,
 }
 
+impl RoleConnectionMetadata {
+    /// Makes a metadata field.
+    #[must_use]
+    pub fn new(
+        kind: RoleConnectionMetadataType,
+        key: impl Into<String>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            kind,
+            key: key.into(),
+            name: name.into(),
+            name_localizations: None,
+            description: description.into(),
+            description_localizations: None,
+        }
+    }
+}
+
 crate::discord_enum! {
     /// How a role connection metadata value compares with the value that a guild sets.
     pub enum RoleConnectionMetadataType: u8 {

@@ -498,6 +498,18 @@ pub struct CommandPermission {
     pub permission: bool,
 }
 
+impl CommandPermission {
+    /// Makes a permission for a role, a user, or a channel.
+    #[must_use]
+    pub fn new(id: GenericId, kind: CommandPermissionType, permission: bool) -> Self {
+        Self {
+            id,
+            kind,
+            permission,
+        }
+    }
+}
+
 crate::discord_enum! {
     /// The target type of a command permission.
     pub enum CommandPermissionType: u8 {

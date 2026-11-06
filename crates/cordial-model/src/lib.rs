@@ -47,6 +47,7 @@ pub mod user;
 pub mod validate;
 pub mod voice;
 pub mod webhook;
+pub mod webhook_event;
 
 pub use color::Color;
 pub use id::Id;

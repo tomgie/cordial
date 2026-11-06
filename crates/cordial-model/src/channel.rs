@@ -370,6 +370,26 @@ pub struct DefaultReaction {
     pub emoji_name: Option<String>,
 }
 
+impl DefaultReaction {
+    /// Makes a default reaction with a custom emoji.
+    #[must_use]
+    pub fn custom(emoji_id: EmojiId) -> Self {
+        Self {
+            emoji_id: Some(emoji_id),
+            emoji_name: None,
+        }
+    }
+
+    /// Makes a default reaction with a Unicode emoji.
+    #[must_use]
+    pub fn unicode(emoji: impl Into<String>) -> Self {
+        Self {
+            emoji_id: None,
+            emoji_name: Some(emoji.into()),
+        }
+    }
+}
+
 /// A tag that threads in a forum or media channel can have.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[non_exhaustive]

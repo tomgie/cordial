@@ -377,6 +377,35 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 /// A shard: one gateway connection.
+///
+/// [`Shard::start`] runs the shard in a Tokio task. The task connects again after a lost
+/// connection, and resumes the session when it can. The [`ShardHandle`] sends gateway
+/// commands and closes the shard. Use [`ShardManager`](crate::ShardManager) for more than
+/// one shard.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// use cordial_gateway::{CloseMode, Command, Shard, ShardConfig, ShardEvent};
+/// use cordial_http::Token;
+/// use cordial_model::gateway::presence::{Activity, Status};
+/// use cordial_model::gateway::{Event, Intents, UpdatePresence};
+///
+/// let config = ShardConfig::new(Token::from_env("DISCORD_TOKEN")?, Intents::GUILDS);
+/// let (shard, mut events) = Shard::start(config);
+///
+/// while let Some(message) = events.recv().await {
+///     if let ShardEvent::Dispatch(event) = message.event
+///         && let Event::Ready(_) = *event
+///     {
+///         let presence = UpdatePresence::new(Status::Online, vec![Activity::playing("a game")]);
+///         shard.send(Command::UpdatePresence(presence)).await?;
+///         break;
+///     }
+/// }
+/// shard.close(CloseMode::End).await;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct Shard;
 

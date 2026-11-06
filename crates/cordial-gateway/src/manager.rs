@@ -228,6 +228,37 @@ impl ShardManagerBuilder {
 }
 
 /// Runs and supervises many shards, and merges their events.
+///
+/// [`ShardManager::builder`] makes the settings. [`ShardManagerBuilder::start`] gets the
+/// shard count and the session start limit from `GET /gateway/bot`, and starts the shards.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// use cordial_gateway::{ShardEvent, ShardManager, ShardRange};
+/// use cordial_http::{Client, Token};
+/// use cordial_model::gateway::{Event, Intents};
+///
+/// let http = Client::new(Token::from_env("DISCORD_TOKEN")?);
+/// let mut manager = ShardManager::builder(http, Intents::GUILDS)
+///     .shards(ShardRange::Recommended)
+///     .start()
+///     .await?;
+///
+/// while let Some(message) = manager.next_event().await {
+///     match message.event {
+///         ShardEvent::Dispatch(event) => {
+///             if let Event::GuildCreate(guild) = *event {
+///                 tracing::info!(shard = message.shard_id, guild_id = %guild.id(), "a guild");
+///             }
+///         }
+///         ShardEvent::Fatal(error) => return Err(error.into()),
+///         _ => {}
+///     }
+/// }
+/// manager.close().await;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct ShardManager {
     shards: Vec<ShardHandle>,

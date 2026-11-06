@@ -200,6 +200,27 @@ impl ResourceTypes {
 }
 
 /// The in-memory cache. It is cheap to clone; clones share the data.
+///
+/// Give each gateway event to [`Cache::update`]. The framework does this before it runs
+/// the handlers. [`ResourceTypes::event_types`] and [`ResourceTypes::intents`] tell what
+/// the cache needs.
+///
+/// ```
+/// use cordial_cache::{Cache, ResourceTypes};
+/// use cordial_model::gateway::Event;
+/// use cordial_model::id::ChannelId;
+/// use serde_json::value::RawValue;
+///
+/// let cache = Cache::new(ResourceTypes::CHANNEL);
+///
+/// let data = r#"{"id": "10", "type": 0, "guild_id": "1", "name": "general"}"#;
+/// let raw = RawValue::from_string(data.to_owned()).unwrap();
+/// let event = Event::decode("CHANNEL_CREATE", &raw).unwrap();
+/// cache.update(&event);
+///
+/// let channel = cache.channel(ChannelId::new_const(10)).unwrap();
+/// assert_eq!(channel.name.as_deref(), Some("general"));
+/// ```
 #[derive(Clone, Debug)]
 pub struct Cache {
     inner: Arc<Inner>,

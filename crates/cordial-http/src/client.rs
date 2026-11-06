@@ -34,6 +34,34 @@ const INVALID_SLOW_THRESHOLD: usize = 9000;
 /// A client for the HTTP API of Discord.
 ///
 /// The client is cheap to clone. All clones share the rate limiter and the connection pool.
+///
+/// The client has one method for each endpoint. Each method gives a request type with
+/// setters. Write `.await` to send the request.
+///
+/// ```no_run
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// use std::time::Duration;
+///
+/// use cordial_http::{Client, JsonErrorCode, Token};
+/// use cordial_model::id::ChannelId;
+///
+/// let client = Client::builder()
+///     .token(Token::from_env("DISCORD_TOKEN")?)
+///     .user_agent_suffix("my-bot/1.0")
+///     .timeout(Duration::from_secs(15))
+///     .build();
+///
+/// let channel_id = ChannelId::new_const(1234);
+/// let message = client.create_message(channel_id).content("Hello").await?;
+///
+/// // A message that is already gone is not an error here.
+/// match client.delete_message(channel_id, message.id).await {
+///     Err(error) if error.code() != Some(JsonErrorCode::UnknownMessage) => return Err(error.into()),
+///     _ => {}
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<Inner>,

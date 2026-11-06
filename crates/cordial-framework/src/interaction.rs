@@ -91,6 +91,23 @@ impl ResponseTracker {
 /// The context of an interaction handler.
 ///
 /// It dereferences to [`Context`], so `ctx.http()` and `ctx.state()` work.
+///
+/// ```no_run
+/// use cordial_framework::{BoxError, CommandContext};
+/// use cordial_model::embed::Embed;
+///
+/// // A command handler. The command type is not important here.
+/// async fn report(ctx: CommandContext<()>) -> Result<(), BoxError> {
+///     // The work takes more than 3 seconds, so acknowledge first.
+///     ctx.defer_ephemeral().await?;
+///     let embed = Embed::new().title("Report").description("All systems work.");
+///     // After the defer, `reply` edits the original response.
+///     ctx.reply(embed).await?;
+///     // Now `reply` sends a follow-up message.
+///     ctx.reply("A second message.").await?;
+///     Ok(())
+/// }
+/// ```
 pub struct InteractionContext<S> {
     context: Context<S>,
     interaction: Arc<Interaction>,

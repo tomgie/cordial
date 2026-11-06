@@ -9,6 +9,28 @@ use crate::command::ParseError;
 ///
 /// Each field is a text input in a `Label`. A `String` field is required. An
 /// `Option<String>` field is not required.
+///
+/// Show the modal with [`InteractionContext::modal`](crate::InteractionContext::modal).
+/// Give the submit handler to [`BotBuilder::modal`](crate::BotBuilder::modal).
+///
+/// ```
+/// use cordial_framework::Modal;
+///
+/// /// The feedback form.
+/// #[derive(Modal)]
+/// #[modal(title = "Feedback")]
+/// # #[modal(crate = "cordial_framework")]
+/// struct Feedback {
+///     #[field(label = "Subject", max_length = 80)]
+///     subject: String,
+///     #[field(label = "Details", style = "paragraph")]
+///     details: Option<String>,
+/// }
+///
+/// let modal = Feedback::modal("feedback:1234");
+/// assert_eq!(modal.title, "Feedback");
+/// assert_eq!(modal.components.len(), 2);
+/// ```
 pub trait Modal: Sized {
     /// The modal title.
     const TITLE: &'static str;

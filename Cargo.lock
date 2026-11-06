@@ -350,6 +350,7 @@ dependencies = [
  "cordial-macros",
  "cordial-model",
  "cordial-voice",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -439,6 +440,7 @@ dependencies = [
 name = "cordial-macros"
 version = "0.7.0"
 dependencies = [
+ "cordial-framework",
  "proc-macro-crate",
  "proc-macro2",
  "quote",

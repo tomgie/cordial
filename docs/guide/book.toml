@@ -1,0 +1,14 @@
+[book]
+title = "The cordial guide"
+description = "How to write Discord bots in Rust with cordial."
+authors = ["cordial contributors"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+# The samples need a bot token and the cordial crates. The playground cannot run them.
+[output.html.playground]
+runnable = false

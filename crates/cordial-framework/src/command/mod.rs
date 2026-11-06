@@ -34,6 +34,29 @@ pub trait CommandOptions: Sized {
 }
 
 /// A top-level command: a slash command, a user command, or a message command.
+///
+/// `#[derive(Command)]` and `#[derive(CommandGroup)]` implement it. Give the handler of the
+/// command to [`BotBuilder::command`](crate::BotBuilder::command).
+///
+/// ```
+/// use cordial_framework::Command;
+/// use cordial_model::command::CommandType;
+///
+/// /// Bans a member.
+/// #[derive(Command)]
+/// #[command(name = "ban", description = "Ban a member", default_member_permissions = "BAN_MEMBERS")]
+/// # #[command(crate = "cordial_framework")]
+/// struct Ban {
+///     #[option(description = "The reason, for the audit log", max_length = 512)]
+///     reason: Option<String>,
+/// }
+///
+/// assert_eq!(Ban::NAME, "ban");
+/// assert_eq!(Ban::KIND, CommandType::ChatInput);
+/// let definition = Ban::definition();
+/// assert_eq!(definition.options[0].name, "reason");
+/// assert!(!definition.options[0].required);
+/// ```
 pub trait Command: Sized + Send + 'static {
     /// The command name. The router uses it with the command type.
     const NAME: &'static str;

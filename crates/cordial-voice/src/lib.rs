@@ -28,9 +28,14 @@
 //! ```no_run
 //! # async fn run(shard: cordial_gateway::ShardHandle, guild_id: cordial_model::id::GuildId,
 //! #     channel_id: cordial_model::id::ChannelId) -> Result<(), Box<dyn std::error::Error>> {
-//! use cordial_voice::{OggOpusSource, Track, VoiceEvent, VoiceManager};
+//! use cordial_voice::{
+//!     CallConfig, DaveSession, E2eeSession, OggOpusSource, Track, VoiceEvent, VoiceManager,
+//! };
 //!
-//! let manager = VoiceManager::new(shard);
+//! // Discord needs DAVE end-to-end encryption: one session for each call.
+//! let manager = VoiceManager::with_e2ee(shard, CallConfig::default(), || {
+//!     Box::new(DaveSession::new().expect("the DAVE key pair is made")) as Box<dyn E2eeSession>
+//! });
 //! // Give each gateway event to the manager: manager.handle_event(&event);
 //! let call = manager.join(guild_id, channel_id).await?;
 //! let track = call.enqueue(Track::new(OggOpusSource::open("intro.ogg")?));

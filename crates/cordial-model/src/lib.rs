@@ -9,6 +9,31 @@
 //! Discord adds fields, enum values, and flag bits without a new API version.
 //! Every enum has an `Unknown` variant, and every flag type keeps unknown bits.
 //! Structs are `#[non_exhaustive]`.
+//!
+//! # Example
+//!
+//! IDs are typed: a [`id::UserId`] cannot go where a [`id::ChannelId`] is necessary.
+//! Builders make the objects that requests take.
+//!
+//! ```
+//! use cordial_model::embed::Embed;
+//! use cordial_model::id::UserId;
+//! use cordial_model::interaction::InteractionMessage;
+//! use cordial_model::{Color, Permissions};
+//!
+//! let user_id: UserId = "80351110224678912".parse().unwrap();
+//! assert_eq!(user_id.get(), 80_351_110_224_678_912);
+//!
+//! let embed = Embed::new()
+//!     .title("Status")
+//!     .description("All systems work.")
+//!     .color(Color::from_rgb(0x2E, 0xCC, 0x71));
+//! let message = InteractionMessage::text("Report").embed(embed).ephemeral();
+//! assert_eq!(message.content.as_deref(), Some("Report"));
+//!
+//! let permissions = Permissions::SEND_MESSAGES | Permissions::VIEW_CHANNEL;
+//! assert!(permissions.contains(Permissions::VIEW_CHANNEL));
+//! ```
 
 #[macro_use]
 mod macros;

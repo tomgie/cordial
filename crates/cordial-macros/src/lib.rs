@@ -6,6 +6,44 @@
 //! The generated code finds the framework through a direct dependency on `cordial-framework`
 //! first, and then through the facade crate `cordial`. Use `crate = "path"` in the type
 //! attribute (`#[command]`, `#[choice]`, or `#[modal]`) to give a different path.
+//!
+//! Use the macros through the framework (`cordial_framework::Command`) or the facade
+//! (`cordial::framework::Command`). The same name is the trait and the derive macro.
+//!
+//! ```
+//! use cordial_framework::{Choice, Command, CommandGroup};
+//!
+//! /// The unit of a duration.
+//! #[derive(Choice)]
+//! enum Unit {
+//!     Minutes,
+//!     Hours,
+//! }
+//!
+//! /// The options of `/timer start`.
+//! #[derive(Command)]
+//! struct Start {
+//!     #[option(description = "The length", min_value = 1, max_value = 600)]
+//!     length: u16,
+//!     #[option(description = "The unit (default: minutes)")]
+//!     unit: Option<Unit>,
+//! }
+//!
+//! /// `/timer start` and `/timer stop`.
+//! #[derive(CommandGroup)]
+//! #[command(name = "timer", description = "Manage a timer")]
+//! enum Timer {
+//!     #[subcommand(description = "Start a timer")]
+//!     Start(Start),
+//!     #[subcommand(description = "Stop the timer")]
+//!     Stop,
+//! }
+//!
+//! let definition = <Timer as cordial_framework::Command>::definition();
+//! assert_eq!(definition.name, "timer");
+//! assert_eq!(definition.options.len(), 2);
+//! assert_eq!(definition.options[0].options[1].name, "unit");
+//! ```
 
 mod attr;
 mod case;

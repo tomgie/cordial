@@ -113,6 +113,33 @@ impl HttpResponse {
 }
 
 /// An HTTP endpoint for interactions and webhook events.
+///
+/// The endpoint checks the signature and the age of each request, answers PING, and gives
+/// the rest to the [`Handler`]. Give the headers and the raw body of a request to
+/// [`Endpoint::handle`], or serve the endpoint with the `axum` feature.
+///
+/// ```
+/// use cordial_endpoint::{Endpoint, Handler, PublicKey, Reply};
+/// use cordial_model::interaction::{Interaction, InteractionMessage, InteractionResponse};
+///
+/// struct Greeter;
+///
+/// impl Handler for Greeter {
+///     async fn interaction(&self, _interaction: Interaction) -> Reply {
+///         let message = InteractionMessage::text("Hello");
+///         Reply::Response(InteractionResponse::message(message))
+///     }
+/// }
+///
+/// let key = PublicKey::from_hex("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c")
+///     .unwrap();
+/// let endpoint = Endpoint::new(key, Greeter);
+///
+/// // A request without a valid signature gets status 401.
+/// let runtime = tokio::runtime::Runtime::new().unwrap();
+/// let response = runtime.block_on(endpoint.handle(None, None, b"{}"));
+/// assert_eq!(response.status, 401);
+/// ```
 #[derive(Debug)]
 pub struct Endpoint<H> {
     key: PublicKey,

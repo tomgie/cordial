@@ -138,7 +138,38 @@ impl<S> CommandSettings<S> {
     }
 }
 
-/// Builds a [`Bot`].
+/// Builds a [`Bot`]. [`Bot::builder`] makes one.
+///
+/// Call [`BotBuilder::state`] first, because the handlers use the state type. Then add the
+/// handlers and the settings, and call [`BotBuilder::build`].
+///
+/// ```no_run
+/// use std::sync::atomic::{AtomicU64, Ordering};
+///
+/// use cordial_cache::ResourceTypes;
+/// use cordial_framework::{Bot, Context, EventOrder};
+/// use cordial_http::Token;
+/// use cordial_model::gateway::event::MessageCreate;
+///
+/// #[derive(Default)]
+/// struct State {
+///     messages: AtomicU64,
+/// }
+///
+/// async fn count(ctx: Context<State>, _: MessageCreate) {
+///     ctx.state().messages.fetch_add(1, Ordering::Relaxed);
+/// }
+///
+/// # fn build() -> Result<(), Box<dyn std::error::Error>> {
+/// let bot = Bot::builder(Token::from_env("DISCORD_TOKEN")?)
+///     .state(State::default())
+///     .cache(ResourceTypes::GUILD | ResourceTypes::CHANNEL)
+///     .event_order(EventOrder::PerShard)
+///     .on(count)
+///     .build()?;
+/// # Ok(())
+/// # }
+/// ```
 pub struct BotBuilder<S> {
     token: Token,
     http: Option<Client>,
@@ -169,6 +200,30 @@ impl<S> std::fmt::Debug for BotBuilder<S> {
 }
 
 /// A bot: the gateway connection, the cache, and the handlers.
+///
+/// Make it with [`Bot::builder`]. [`Bot::run`] connects to the gateway and runs until the
+/// bot stops. With [`ShutdownMode::Resumable`], the outcome has the sessions for the next
+/// process.
+///
+/// ```no_run
+/// use cordial_framework::{Bot, Context, ShutdownMode};
+/// use cordial_http::Token;
+/// use cordial_model::gateway::event::Ready;
+///
+/// async fn ready(_: Context<()>, ready: Ready) {
+///     tracing::info!(user = %ready.user.username, "the bot is ready");
+/// }
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// let bot = Bot::builder(Token::from_env("DISCORD_TOKEN")?)
+///     .on(ready)
+///     .shutdown_mode(ShutdownMode::Resumable)
+///     .build()?;
+/// let outcome = bot.run().await?;
+/// tracing::info!(sessions = outcome.sessions.len(), "the bot stopped");
+/// # Ok(())
+/// # }
+/// ```
 pub struct Bot<S> {
     pub(crate) context: Context<S>,
     router: Arc<Router<S>>,

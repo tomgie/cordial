@@ -2,4 +2,6 @@
 **/*.rs.bk
 *.pdb
 .env
+# The output of `mdbook build docs/guide`.
+/docs/guide/book
 /.claude/

@@ -16,6 +16,7 @@ use cordial::model::embed::Embed;
 use cordial::model::gateway::Intents;
 use cordial::model::message::Message;
 
+// ANCHOR: roll
 /// Rolls a die.
 #[derive(Command)]
 #[command(
@@ -28,6 +29,7 @@ struct Roll {
     #[option(description = "The number of sides", min_value = 2, max_value = 1000)]
     sides: Option<u16>,
 }
+// ANCHOR_END: roll
 
 async fn roll(ctx: CommandContext<()>, args: Roll) -> Result<(), BoxError> {
     let sides = u64::from(args.sides.unwrap_or(6));
@@ -37,6 +39,7 @@ async fn roll(ctx: CommandContext<()>, args: Roll) -> Result<(), BoxError> {
     Ok(())
 }
 
+// ANCHOR: targets
 /// Quotes a message.
 #[derive(Command)]
 #[command(
@@ -71,6 +74,7 @@ async fn avatar(ctx: CommandContext<()>, Avatar(target): Avatar) -> Result<(), B
     ctx.reply(url).ephemeral().await?;
     Ok(())
 }
+// ANCHOR_END: targets
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

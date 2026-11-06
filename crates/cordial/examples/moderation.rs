@@ -24,6 +24,7 @@ struct State {
 
 type Ctx = CommandContext<State>;
 
+// ANCHOR: choice
 /// How many messages of the member to delete.
 #[derive(Choice)]
 enum DeleteMessages {
@@ -36,7 +37,9 @@ enum DeleteMessages {
     #[choice(name = "Last week", value = 604_800)]
     Week,
 }
+// ANCHOR_END: choice
 
+// ANCHOR: ban
 /// Bans a member.
 #[derive(Command)]
 #[command(
@@ -74,6 +77,7 @@ async fn ban(ctx: Ctx, args: Ban) -> Result<(), BoxError> {
         .await?;
     Ok(())
 }
+// ANCHOR_END: ban
 
 /// Times out a member.
 #[derive(Command)]
@@ -179,6 +183,7 @@ async fn warn(ctx: Ctx, args: Warn) -> Result<(), BoxError> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
+    // ANCHOR: builder
     let bot = Bot::builder(Token::from_env("DISCORD_TOKEN")?)
         .state(State::default())
         // Discord hides the command from members without the permission. The check is a
@@ -191,6 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .command(warn)
         .build()?;
+    // ANCHOR_END: builder
 
     bot.run().await?;
     Ok(())

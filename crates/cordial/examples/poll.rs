@@ -44,6 +44,7 @@ impl Poll {
         let status = if self.closed { " (closed)" } else { "" };
         let content = format!("{}{status}\n{}", self.question, lines.join("\n"));
 
+        // ANCHOR: buttons
         let buttons = self.choices.iter().enumerate().map(|(index, choice)| {
             Button::new(
                 ButtonStyle::Primary,
@@ -57,6 +58,7 @@ impl Poll {
         InteractionMessage::text(content)
             .component(ActionRow::new(buttons.map(Component::from)))
             .component(ActionRow::new([close]))
+        // ANCHOR_END: buttons
     }
 }
 
@@ -96,6 +98,7 @@ async fn start_poll(ctx: CommandContext<State>, args: StartPoll) -> Result<(), B
     ctx.reply(poll.message(poll_id)).await?;
     ctx.state().polls.lock().await.insert(poll_id, poll);
 
+    // ANCHOR: collector
     // Only the author can close the poll. The collector takes the press, so the router does
     // not see it.
     let author = ctx.user_id();
@@ -126,9 +129,11 @@ async fn start_poll(ctx: CommandContext<State>, args: StartPoll) -> Result<(), B
             ctx.edit_reply(message).await?;
         }
     }
+    // ANCHOR_END: collector
     Ok(())
 }
 
+// ANCHOR: vote
 async fn vote(ctx: ComponentContext<State>) -> Result<(), BoxError> {
     let poll_id: u64 = ctx.param("poll")?;
     let choice: usize = ctx.param("choice")?;
@@ -146,6 +151,7 @@ async fn vote(ctx: ComponentContext<State>) -> Result<(), BoxError> {
     ctx.update_message(message).await?;
     Ok(())
 }
+// ANCHOR_END: vote
 
 async fn close_by_other(ctx: ComponentContext<State>) -> Result<(), BoxError> {
     ctx.reply("Only the author can close the poll.")
@@ -158,12 +164,14 @@ async fn close_by_other(ctx: ComponentContext<State>) -> Result<(), BoxError> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
+    // ANCHOR: builder
     let bot = Bot::builder(Token::from_env("DISCORD_TOKEN")?)
         .state(State::default())
         .command(start_poll)
         .component("vote:{poll}:{choice}", vote)
         .component("close:{poll}", close_by_other)
         .build()?;
+    // ANCHOR_END: builder
 
     bot.run().await?;
     Ok(())

@@ -183,6 +183,31 @@ pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 ///
 /// The call connects again after a lost connection. It stops after [`Call::disconnect`],
 /// after a fatal close code, or when all clones are dropped.
+///
+/// [`VoiceManager::join`](crate::VoiceManager::join) gives a call.
+///
+/// ```no_run
+/// # async fn run(call: cordial_voice::Call) -> Result<(), Box<dyn std::error::Error>> {
+/// use std::time::Duration;
+///
+/// use cordial_voice::{OggOpusSource, Track, TrackEvent, VoiceEvent};
+///
+/// // Two tracks in the queue. The second starts when the first ends.
+/// let intro = call.enqueue(Track::new(OggOpusSource::open("intro.ogg")?).volume(0.8));
+/// let song = call.enqueue(OggOpusSource::open("song.ogg")?);
+/// intro.seek(Duration::from_secs(5));
+///
+/// let mut events = call.subscribe();
+/// while let Ok(event) = events.recv().await {
+///     if let VoiceEvent::Track(TrackEvent::Ended { track, .. }) = event
+///         && track == song.id()
+///     {
+///         break;
+///     }
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct Call {
     shared: Arc<CallShared>,

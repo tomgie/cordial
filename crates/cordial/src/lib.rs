@@ -14,6 +14,36 @@
 //! | `endpoint` | `endpoint` | no |
 //! | `axum` | `endpoint::axum` | no |
 //! | `voice` | `voice` | no |
+//!
+//! The guide book in `docs/guide` explains each layer. The examples in `examples/` are
+//! complete bots.
+//!
+//! # Example
+//!
+//! A bot with one slash command:
+//!
+//! ```no_run
+//! use cordial::framework::{Bot, BoxError, Command, CommandContext};
+//! use cordial::http::Token;
+//!
+//! /// Checks that the bot is online.
+//! #[derive(Command)]
+//! #[command(name = "ping", description = "Check that the bot is online")]
+//! struct Ping;
+//!
+//! async fn ping(ctx: CommandContext<()>, _: Ping) -> Result<(), BoxError> {
+//!     ctx.reply("Pong!").await?;
+//!     Ok(())
+//! }
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let bot = Bot::builder(Token::from_env("DISCORD_TOKEN")?)
+//!     .command(ping)
+//!     .build()?;
+//! bot.run().await?;
+//! # Ok(())
+//! # }
+//! ```
 
 pub use cordial_model as model;
 

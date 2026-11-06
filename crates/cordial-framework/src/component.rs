@@ -11,6 +11,24 @@ use std::str::FromStr;
 use crate::interaction::InteractionContext;
 
 /// A parsed `custom_id` pattern.
+///
+/// [`BotBuilder::component`](crate::BotBuilder::component) and
+/// [`BotBuilder::modal`](crate::BotBuilder::modal) parse the patterns of the handlers. Use
+/// the same pattern to make the `custom_id`, so that the two cannot disagree.
+///
+/// ```
+/// use cordial_framework::Pattern;
+///
+/// let pattern = Pattern::parse("vote:{poll}:{choice}").unwrap();
+///
+/// let custom_id = pattern.format(&[("poll", &12), ("choice", &"yes")]).unwrap();
+/// assert_eq!(custom_id, "vote:12:yes");
+///
+/// let params = pattern.matches(&custom_id).unwrap();
+/// assert_eq!(params.parse::<u64>("poll"), Ok(12));
+/// assert_eq!(params.get("choice"), Some("yes"));
+/// assert!(pattern.matches("vote::yes").is_none());
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pattern {
     source: String,

@@ -4,8 +4,12 @@
 
 pub mod channel;
 pub mod gateway;
+pub mod interaction;
 pub mod message;
+pub mod reaction;
+pub mod soundboard;
 pub mod user;
+pub mod webhook;
 
 /// Implements `IntoFuture` for a request type with a `client` field.
 macro_rules! into_future {

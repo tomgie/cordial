@@ -84,19 +84,19 @@ Exit: all docs examples decode and encode back without loss. Unknown values surv
 
 ## P2: HTTP core
 
-- [ ] `Token` type (redacted, zeroed on drop).
-- [ ] `Endpoint` trait, `Route`, major parameter, `IntoFuture` request pattern.
-- [ ] `Transport` trait and the `reqwest` implementation. Fake transport for tests.
-- [ ] `User-Agent`, `Authorization`, `X-Audit-Log-Reason` (URL-encoded).
-- [ ] Request bodies: JSON, form, multipart with `payload_json` and `files[n]`.
-- [ ] Error decode: status, `JsonErrorCode` (245 codes), nested field errors.
-- [ ] Rate limiter: route keys, bucket discovery, temporary buckets, global limiter, 429 scopes, FIFO queues, idle bucket removal.
-- [ ] Invalid-request budget tracker. Token invalidation on 401.
-- [ ] Rate-limit JSON error codes as typed errors (20016, 20028, 20029, 30046, 40062, 110000).
-- [ ] Retry policy (idempotent methods, `enforce_nonce`).
-- [ ] Client-side validation framework (ARCHITECTURE section 5.4).
-- [ ] First endpoints: Get Gateway, Get Gateway Bot, Get Current User, Get Channel, Create Message (with files), Edit Message, Delete Message, Get Messages.
-- [ ] `xtask spec-check` first version: compare routes with the OpenAPI specification.
+- [x] `Token` type (redacted, zeroed on drop).
+- [x] `Endpoint` trait, `Route`, major parameter, `IntoFuture` request pattern.
+- [x] `Transport` trait and the `reqwest` implementation. Fake transport for tests.
+- [x] `User-Agent`, `Authorization`, `X-Audit-Log-Reason` (URL-encoded).
+- [x] Request bodies: JSON, form, multipart with `payload_json` and `files[n]`.
+- [x] Error decode: status, `JsonErrorCode` (245 codes), nested field errors.
+- [x] Rate limiter: route keys, bucket discovery, temporary buckets, global limiter, 429 scopes, FIFO queues, idle bucket removal.
+- [x] Invalid-request budget tracker. Token invalidation on 401.
+- [x] Rate-limit JSON error codes as typed errors (20016, 20028, 20029, 30046, 40062, 110000).
+- [x] Retry policy (idempotent methods, `enforce_nonce`).
+- [x] Client-side validation framework (ARCHITECTURE section 5.4).
+- [x] First endpoints: Get Gateway, Get Gateway Bot, Get Current User, Get Channel, Create Message (with files), Edit Message, Delete Message, Get Messages.
+- [x] `xtask spec-check` first version: compare routes with the OpenAPI specification.
 
 Exit: a test bot sends a message with an attachment. Rate-limit tests pass for all 429 scopes.
 

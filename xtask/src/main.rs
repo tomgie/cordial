@@ -5,6 +5,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod fixtures;
+mod spec_check;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -15,7 +16,10 @@ Usage: cargo xtask <task>
 Tasks:
   fixtures <docs-dir>   Extract the JSON examples from the Discord docs into fixtures/docs.
                         <docs-dir> is the developers/ folder of a discord/discord-api-docs checkout.
-  spec-check            Compare the library with the Discord OpenAPI specification (not done yet).
+  spec-check <openapi.json> [--strict]
+                        Compare the endpoints of cordial-http with the Discord OpenAPI
+                        specification (specs/openapi.json of discord/discord-api-spec).
+                        With --strict, fail when an operation is missing.
 ";
 
 fn main() -> ExitCode {
@@ -30,9 +34,16 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        ["spec-check"] => {
-            eprintln!("spec-check is not done yet. See docs/ROADMAP.md, phase P2.");
-            ExitCode::FAILURE
+        ["spec-check", spec_path, options @ ..] => {
+            let strict = options.contains(&"--strict");
+            match spec_check::run(&PathBuf::from(spec_path)) {
+                Ok(missing) if strict && missing > 0 => ExitCode::FAILURE,
+                Ok(_) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("spec-check: {error}");
+                    ExitCode::FAILURE
+                }
+            }
         }
         _ => {
             print!("{USAGE}");

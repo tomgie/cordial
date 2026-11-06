@@ -6,7 +6,7 @@ of `cordial` and turn on `http`:
 
 ```toml
 [dependencies]
-cordial = { version = "0.7", default-features = false, features = ["http"] }
+cordial = { version = "0.9", default-features = false, features = ["http"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

@@ -16,8 +16,8 @@ version to turn them on:
 
 ```toml
 [dependencies]
-cordial = { version = "0.7", features = ["voice"] }
-cordial-voice = { version = "0.7", features = ["opus"] }
+cordial = { version = "0.9", features = ["voice"] }
+cordial-voice = { version = "0.9", features = ["opus"] }
 ```
 
 Without `opus`, the bot does not send PCM audio and logs one warning. Ogg Opus files need

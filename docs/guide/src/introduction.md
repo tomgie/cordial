@@ -53,7 +53,7 @@ A bot with the framework needs this in `Cargo.toml`:
 
 ```toml
 [dependencies]
-cordial = "0.7"
+cordial = "0.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing-subscriber = "0.3"
 ```
@@ -62,7 +62,7 @@ A bot that uses only the HTTP API turns off the default features:
 
 ```toml
 [dependencies]
-cordial = { version = "0.7", default-features = false, features = ["http"] }
+cordial = { version = "0.9", default-features = false, features = ["http"] }
 ```
 
 The `opus` and `symphonia` features are features of `cordial-voice`, not of the facade.

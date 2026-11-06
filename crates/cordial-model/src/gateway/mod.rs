@@ -72,6 +72,40 @@ pub struct Hello {
     pub heartbeat_interval: u64,
 }
 
+/// The response of `GET /gateway`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct GatewayInfo {
+    /// The WebSocket URL.
+    pub url: String,
+}
+
+/// The response of `GET /gateway/bot`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct GatewayBotInfo {
+    /// The WebSocket URL.
+    pub url: String,
+    /// The recommended number of shards.
+    pub shards: u32,
+    /// The session start limit.
+    pub session_start_limit: SessionStartLimit,
+}
+
+/// The session start limit of a bot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct SessionStartLimit {
+    /// The number of session starts allowed in the period.
+    pub total: u32,
+    /// The number of session starts left.
+    pub remaining: u32,
+    /// The time until the limit resets, in milliseconds.
+    pub reset_after: u64,
+    /// The number of Identify requests allowed for each 5 seconds.
+    pub max_concurrency: u32,
+}
+
 crate::discord_enum! {
     /// A close code of the gateway.
     pub enum CloseCode: u16 {

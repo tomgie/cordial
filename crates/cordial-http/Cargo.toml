@@ -9,8 +9,33 @@ categories.workspace = true
 keywords.workspace = true
 authors.workspace = true
 
+[features]
+default = ["rustls"]
+# The default transport: reqwest with rustls.
+rustls = ["reqwest-transport", "reqwest/rustls"]
+# The default transport: reqwest with the TLS library of the system.
+native-tls = ["reqwest-transport", "reqwest/native-tls"]
+# The reqwest transport without a TLS choice. Turn on `rustls` or `native-tls`.
+reqwest-transport = ["dep:reqwest"]
+# A fake transport for tests.
+testing = []
+
 [dependencies]
 cordial-model.workspace = true
+bytes.workspace = true
+http.workspace = true
+percent-encoding.workspace = true
+reqwest = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt"] }
+tracing.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+cordial-http = { path = ".", features = ["testing"] }
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true

@@ -47,6 +47,14 @@ cordial-framework = { path = "crates/cordial-framework", version = "=0.0.1" }
 # External crates.
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
+bytes = "1"
+http = "1"
+percent-encoding = "2"
+reqwest = { version = "0.13", default-features = false, features = ["http2"] }
+thiserror = "2"
+tokio = { version = "1.47", default-features = false }
+tracing = "0.1"
+zeroize = "1"
 
 [workspace.lints.rust]
 missing_docs = "deny"

@@ -7,14 +7,18 @@ pub mod channel;
 pub mod command;
 pub mod emoji;
 pub mod gateway;
+pub mod interaction;
 pub mod invite;
 pub mod message;
 pub mod poll;
+pub mod reaction;
+pub mod soundboard;
 pub mod stage;
 pub mod sticker;
 pub mod thread;
 pub mod user;
 pub mod voice;
+pub mod webhook;
 
 /// Implements `IntoFuture` for a request type with a `client` field.
 macro_rules! into_future {

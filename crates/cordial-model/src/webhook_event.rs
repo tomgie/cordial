@@ -67,13 +67,13 @@ impl WebhookEventBody {
                 WebhookEvent::ApplicationDeauthorized(serde_json::from_value(data)?)
             }
             WebhookEventType::EntitlementCreate => {
-                WebhookEvent::EntitlementCreate(serde_json::from_value(data)?)
+                WebhookEvent::EntitlementCreate(Box::new(serde_json::from_value(data)?))
             }
             WebhookEventType::EntitlementUpdate => {
-                WebhookEvent::EntitlementUpdate(serde_json::from_value(data)?)
+                WebhookEvent::EntitlementUpdate(Box::new(serde_json::from_value(data)?))
             }
             WebhookEventType::EntitlementDelete => {
-                WebhookEvent::EntitlementDelete(serde_json::from_value(data)?)
+                WebhookEvent::EntitlementDelete(Box::new(serde_json::from_value(data)?))
             }
             WebhookEventType::LobbyMessageDelete => {
                 WebhookEvent::LobbyMessageDelete(serde_json::from_value(data)?)
@@ -125,11 +125,11 @@ pub enum WebhookEvent {
     /// A user deauthorized the application.
     ApplicationDeauthorized(ApplicationDeauthorized),
     /// An entitlement was made.
-    EntitlementCreate(Entitlement),
+    EntitlementCreate(Box<Entitlement>),
     /// An entitlement changed.
-    EntitlementUpdate(Entitlement),
+    EntitlementUpdate(Box<Entitlement>),
     /// An entitlement was deleted.
-    EntitlementDelete(Entitlement),
+    EntitlementDelete(Box<Entitlement>),
     /// A message in a lobby was deleted.
     LobbyMessageDelete(LobbyMessageDelete),
     /// Another event type, with its raw data. Social SDK message events are here.

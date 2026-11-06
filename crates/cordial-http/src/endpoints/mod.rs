@@ -3,23 +3,34 @@
 //! Each request type has setters and implements `IntoFuture`. Write `.await` to send it.
 
 pub mod application;
+pub mod audit_log;
+pub mod auto_moderation;
+pub mod ban;
 pub mod channel;
 pub mod command;
 pub mod emoji;
 pub mod gateway;
+pub mod guild;
+pub mod guild_settings;
 pub mod identity;
 pub mod interaction;
 pub mod invite;
+pub mod join_request;
+mod limits;
 pub mod lobby;
+pub mod member;
 pub mod message;
 pub mod monetization;
 pub mod oauth2;
 pub mod partner_sdk;
 pub mod poll;
 pub mod reaction;
+pub mod role;
+pub mod scheduled_event;
 pub mod soundboard;
 pub mod stage;
 pub mod sticker;
+pub mod template;
 pub mod thread;
 pub mod user;
 pub mod voice;

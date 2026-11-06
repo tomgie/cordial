@@ -4,7 +4,11 @@
 
 pub mod channel;
 pub mod gateway;
+pub mod invite;
 pub mod message;
+pub mod poll;
+pub mod stage;
+pub mod thread;
 pub mod user;
 
 /// Implements `IntoFuture` for a request type with a `client` field.

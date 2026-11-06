@@ -1,3 +1,7 @@
+> [!WARNING]
+> This project is vibecoded. Claude, an AI model from Anthropic, wrote most of the code, the tests, and the documents.
+> Read and test the code before you use it in production.
+
 # cordial
 
 A full-featured Rust library for Discord bots.
@@ -5,11 +9,6 @@ A full-featured Rust library for Discord bots.
 > Status: pre-release. All roadmap phases are complete, except a live soak test with 1000+ guilds.
 > Live tests with Discord ran for command sync, interactions, the gateway, and voice with DAVE.
 > The public API can change before 1.0. See the [roadmap](docs/ROADMAP.md).
-
-## AI-generated code
-
-This project is vibecoded. Claude, an AI model from Anthropic, wrote most of the code, the tests, and the documents.
-Read and test the code before you use it in production.
 
 ## Goals
 

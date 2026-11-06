@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.12.2
+
+### Changed
+
+- `README.md`: the vibecoded note is now a GitHub warning alert at the top of the file.
+
 ## 0.12.1
 
 ### Changed

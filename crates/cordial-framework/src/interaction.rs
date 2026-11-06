@@ -445,7 +445,7 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
     }
 
     fn token(&self) -> String {
-        self.interaction.token.clone()
+        self.interaction.token.expose().to_owned()
     }
 
     async fn initial(&self, response: InteractionResponse) -> Result<(), cordial_http::Error> {

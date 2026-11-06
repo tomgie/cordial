@@ -27,7 +27,7 @@ impl<T> SendPayload<T> {
 #[non_exhaustive]
 pub struct Identify {
     /// The bot token, without the `Bot ` prefix.
-    pub token: String,
+    pub token: crate::Secret,
     /// The connection properties.
     pub properties: IdentifyProperties,
     /// Payload compression. Not with transport compression.
@@ -59,7 +59,7 @@ impl Identify {
         shard: [u32; 2],
     ) -> Self {
         Self {
-            token: token.into(),
+            token: crate::Secret::new(token),
             properties,
             compress: false,
             large_threshold: None,
@@ -129,7 +129,7 @@ crate::discord_flags! {
 #[non_exhaustive]
 pub struct Resume {
     /// The bot token.
-    pub token: String,
+    pub token: crate::Secret,
     /// The session ID from `READY`.
     pub session_id: String,
     /// The last sequence number that was received.
@@ -141,7 +141,7 @@ impl Resume {
     #[must_use]
     pub fn new(token: impl Into<String>, session_id: impl Into<String>, seq: u64) -> Self {
         Self {
-            token: token.into(),
+            token: crate::Secret::new(token),
             session_id: session_id.into(),
             seq,
         }

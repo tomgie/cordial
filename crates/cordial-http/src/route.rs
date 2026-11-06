@@ -84,7 +84,7 @@ pub enum Authentication {
 }
 
 /// The method, the path, and the rate limit identity of a request.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Route {
     /// The method.
@@ -137,6 +137,25 @@ impl Route {
             template: self.template,
             major: self.major,
         }
+    }
+}
+
+impl fmt::Debug for Route {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // A route without the client token has a webhook or interaction token in its path.
+        let path = if self.authentication == Authentication::None {
+            self.template
+        } else {
+            self.path.as_str()
+        };
+        formatter
+            .debug_struct("Route")
+            .field("method", &self.method)
+            .field("path", &path)
+            .field("major", &self.major)
+            .field("global_limit", &self.global_limit)
+            .field("authentication", &self.authentication)
+            .finish()
     }
 }
 

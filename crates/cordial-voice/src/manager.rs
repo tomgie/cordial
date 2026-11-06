@@ -196,7 +196,11 @@ impl VoiceManager {
                 self.on_voice_state(guild_id, update.channel_id, &update.session_id);
             }
             Event::VoiceServerUpdate(update) => {
-                self.on_voice_server(update.guild_id, &update.token, update.endpoint.as_deref());
+                self.on_voice_server(
+                    update.guild_id,
+                    update.token.expose(),
+                    update.endpoint.as_deref(),
+                );
             }
             _ => {}
         }

@@ -65,18 +65,20 @@ impl Transport for ReqwestTransport {
         let client = self.client.clone();
         Box::pin(async move {
             let request = reqwest::Request::try_from(request.map(reqwest::Body::from))
-                .map_err(|error| TransportError::InvalidRequest(error.to_string()))?;
+                .map_err(|error| TransportError::InvalidRequest(error.without_url().to_string()))?;
             let response = client
                 .execute(request)
                 .await
-                .map_err(|error| TransportError::Connection(Box::new(error)))?;
+                // The URL can hold a webhook or interaction token. Keep it out of logs.
+                .map_err(|error| TransportError::Connection(Box::new(error.without_url())))?;
 
             let status = response.status();
             let headers = response.headers().clone();
             let body = response
                 .bytes()
                 .await
-                .map_err(|error| TransportError::Connection(Box::new(error)))?;
+                // The URL can hold a webhook or interaction token. Keep it out of logs.
+                .map_err(|error| TransportError::Connection(Box::new(error.without_url())))?;
 
             let mut converted = http::Response::new(body);
             *converted.status_mut() = status;

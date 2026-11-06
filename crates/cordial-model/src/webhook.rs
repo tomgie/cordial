@@ -32,7 +32,7 @@ pub struct Webhook {
     pub avatar: Option<ImageHash>,
     /// The secret token. Only for incoming webhooks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
+    pub token: Option<crate::Secret>,
     /// The application that made the webhook.
     #[serde(default)]
     pub application_id: Option<ApplicationId>,

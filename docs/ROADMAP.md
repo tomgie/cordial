@@ -259,7 +259,7 @@ Exit: a music example plays a file in a DAVE call for 1 hour with Discord client
 - [ ] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
 - [ ] Rustdoc for every public item, with an example on each main type.
 - [ ] Public API review: names, `#[non_exhaustive]`, sealed traits, error types.
-- [ ] Security review: token handling, signature verification, input limits.
+- [x] Security review: token handling, signature verification, input limits (`SECURITY.md`).
 - [ ] Release process: changelog, version bump in all crates, publish order.
 
 Exit: version `1.0.0` criteria are met (see below).

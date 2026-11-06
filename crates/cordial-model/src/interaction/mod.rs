@@ -60,7 +60,7 @@ pub struct Interaction {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<User>,
     /// The token to respond. It is valid for 15 minutes.
-    pub token: String,
+    pub token: crate::Secret,
     /// Always 1.
     #[serde(default)]
     pub version: u8,

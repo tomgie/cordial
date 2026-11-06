@@ -1232,7 +1232,7 @@ pub struct VoiceChannelStatusUpdate {
 #[non_exhaustive]
 pub struct VoiceServerUpdate {
     /// The voice connection token.
-    pub token: String,
+    pub token: crate::Secret,
     /// The guild ID.
     pub guild_id: GuildId,
     /// The voice server host. `None` means that the server is being reallocated: disconnect

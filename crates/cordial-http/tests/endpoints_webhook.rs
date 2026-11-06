@@ -80,7 +80,10 @@ async fn creates_a_webhook() {
 
     assert_eq!(webhook.id, WEBHOOK);
     assert_eq!(webhook.kind, WebhookType::Incoming);
-    assert_eq!(webhook.token.as_deref(), Some(TOKEN));
+    assert_eq!(
+        webhook.token.as_ref().map(cordial_model::Secret::expose),
+        Some(TOKEN)
+    );
     let request = only_request(&transport);
     assert_eq!(request.method, "POST");
     assert_eq!(

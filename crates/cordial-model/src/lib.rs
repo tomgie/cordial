@@ -39,6 +39,7 @@ pub mod oauth2;
 pub mod permissions;
 pub mod poll;
 pub mod scheduled_event;
+pub mod secret;
 pub mod serde_util;
 pub mod soundboard;
 pub mod sticker;
@@ -55,6 +56,7 @@ pub use image::ImageHash;
 pub use locale::Locale;
 pub use nullable::{Nullable, Patch};
 pub use permissions::Permissions;
+pub use secret::Secret;
 pub use time::Timestamp;
 
 /// The version of the Discord API that this library uses.

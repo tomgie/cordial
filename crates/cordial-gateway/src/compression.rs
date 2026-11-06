@@ -39,6 +39,11 @@ impl Compression {
     }
 }
 
+/// The largest gateway message, compressed or decompressed. The largest real messages (a
+/// GUILD_CREATE of a large guild) are a few megabytes. The limit stops a broken or hostile
+/// stream from using all memory.
+pub const MAX_MESSAGE_SIZE: usize = 256 * 1024 * 1024;
+
 /// An error of decompression.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -49,6 +54,9 @@ pub enum DecompressError {
     /// The decompressed data is not valid UTF-8.
     #[error("the decompressed data is not valid UTF-8")]
     Utf8,
+    /// A message is larger than [`MAX_MESSAGE_SIZE`], compressed or decompressed.
+    #[error("a gateway message is larger than {MAX_MESSAGE_SIZE} bytes")]
+    TooLarge,
     /// The compression is not compiled in.
     #[error("the compression {0:?} is not compiled in (turn on its feature)")]
     Unsupported(Compression),
@@ -126,6 +134,10 @@ impl ZlibStream {
     }
 
     fn push(&mut self, frame: &[u8]) -> Result<Option<String>, DecompressError> {
+        if self.buffer.len() + frame.len() > MAX_MESSAGE_SIZE {
+            self.buffer.clear();
+            return Err(DecompressError::TooLarge);
+        }
         self.buffer.extend_from_slice(frame);
         if !self.buffer.ends_with(&Self::SUFFIX) {
             return Ok(None);
@@ -135,6 +147,10 @@ impl ZlibStream {
         let mut offset = 0;
         loop {
             if self.output.len() == self.output.capacity() {
+                if self.output.len() >= MAX_MESSAGE_SIZE {
+                    self.buffer.clear();
+                    return Err(DecompressError::TooLarge);
+                }
                 self.output.reserve(self.output.capacity().max(4096));
             }
             let before_in = self.inflater.total_in();
@@ -195,6 +211,9 @@ impl ZstdStream {
                 .run(&mut input, &mut out)
                 .map_err(|error| DecompressError::Corrupt(error.to_string()))?;
             let written = out.pos();
+            if output.len() + written > MAX_MESSAGE_SIZE {
+                return Err(DecompressError::TooLarge);
+            }
             output.extend_from_slice(&chunk[..written]);
             // Each frame is one complete message, but it does not end a zstd frame.
             if input.pos() >= frame.len() && written < chunk.len() {

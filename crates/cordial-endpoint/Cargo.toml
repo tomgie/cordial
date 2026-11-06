@@ -9,8 +9,24 @@ categories.workspace = true
 keywords.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+# An `axum` router for the endpoint.
+axum = ["dep:axum"]
+
 [dependencies]
 cordial-model.workspace = true
+axum = { workspace = true, optional = true }
+bytes.workspace = true
+ed25519-dalek.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread", "net", "time"] }
 
 [lints]
 workspace = true

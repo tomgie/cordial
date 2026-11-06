@@ -55,6 +55,8 @@ thiserror = "2"
 tokio = { version = "1.47", default-features = false }
 tracing = "0.1"
 zeroize = "1"
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
+ed25519-dalek = "3"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }

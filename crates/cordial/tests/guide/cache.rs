@@ -24,7 +24,10 @@ fn with_cache(token: Token) -> Result<Bot<()>, Error> {
 // ANCHOR: permissions
 /// Tells if the bot can post in this channel.
 #[derive(Command)]
-#[command(name = "can-post", description = "Check the permissions of the bot here")]
+#[command(
+    name = "can-post",
+    description = "Check the permissions of the bot here"
+)]
 struct CanPost;
 
 async fn can_post(ctx: CommandContext<()>, _: CanPost) -> Result<(), BoxError> {

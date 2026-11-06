@@ -4,11 +4,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use cordial::framework::error::HandlerErrorKind;
 use cordial::framework::{
     Bot, BoxError, Check, Command, CommandContext, Context, EventOrder, HandlerError,
+    InteractionContext, ResponseState,
 };
 use cordial::http::Token;
 use cordial::model::gateway::Event;
 use cordial::model::gateway::event::{GuildCreate, MessageCreate};
 use cordial::model::id::UserId;
+use cordial::model::interaction::InteractionMessage;
 
 // ANCHOR: state
 /// The bot state. Each handler gets it with `ctx.state()`.
@@ -43,10 +45,35 @@ async fn on_error(_: Context<State>, error: HandlerError) {
 }
 // ANCHOR_END: error_hook
 
+// ANCHOR: interaction_error
+/// Answers the user of a failed interaction. The context knows the response state.
+async fn on_interaction_error(ctx: InteractionContext<State>, error: HandlerError) {
+    tracing::error!(%error, "an interaction handler failed");
+
+    let text = "Something went wrong. Try again later.";
+    let result = match ctx.response_state().await {
+        ResponseState::Pending | ResponseState::Deferred { .. } => {
+            ctx.reply(text).ephemeral().await
+        }
+        _ => ctx
+            .followup(InteractionMessage::text(text).ephemeral())
+            .await
+            .map(drop),
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, "the error message failed");
+    }
+}
+// ANCHOR_END: interaction_error
+
 // ANCHOR: shutdown
 /// Stops the bot.
 #[derive(Command)]
-#[command(name = "stop", description = "Stop the bot", default_member_permissions = "")]
+#[command(
+    name = "stop",
+    description = "Stop the bot",
+    default_member_permissions = ""
+)]
 struct Stop;
 
 async fn stop(ctx: CommandContext<State>, _: Stop) -> Result<(), BoxError> {
@@ -67,6 +94,7 @@ async fn run(token: Token) -> Result<(), BoxError> {
         .on(count_message)
         .on(guild_create)
         .on_error(on_error)
+        .on_interaction_error(on_interaction_error)
         .command_with(stop, |settings| {
             settings.check(Check::users([UserId::new_const(1234)]))
         })

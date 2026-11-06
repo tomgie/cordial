@@ -32,12 +32,21 @@ A message is anything that converts into `InteractionMessage`: a `&str`, a `Stri
 | State | Meaning | Request of `reply` |
 |---|---|---|
 | `Pending` | No response yet. | The initial response with the message |
-| `Deferred { ephemeral }` | The bot deferred a message. | An edit of the original response |
+| `Deferred { ephemeral }` | The bot deferred a message. | An edit of the original response (see below) |
 | `DeferredUpdate` | The bot deferred an update of the component message. | A follow-up message |
+| `Updated` | The bot updated the component message. | A follow-up message |
 | `Responded` | The bot sent the initial response. | A follow-up message |
 
-After a defer, the defer decides if the message is ephemeral. An `.ephemeral()` call on
-the next reply has no effect on that message.
+A defer sets the visibility of the loading message, and an edit cannot change it. Thus,
+after a defer, `reply` compares the visibility of the message with the defer:
+
+- The same visibility: `reply` edits the loading message.
+- A different visibility: `reply` deletes the loading message and sends a follow-up
+  message. For example, an ephemeral reply after a public defer stays private.
+
+`update_message` works only in the states `Pending`, `DeferredUpdate`, and `Updated`. In
+the other states, the original response is not the component message, so
+`update_message` gives `ResponseError::NotComponentMessage`.
 
 ## Defer a slow command
 
@@ -64,12 +73,31 @@ the policy applies.
 {{#include ../../../crates/cordial/tests/guide/responses.rs:slow}}
 ```
 
-The automatic defer is not ephemeral. Call `defer_ephemeral` yourself for an ephemeral
-answer that takes a long time.
+The automatic defer is not ephemeral. An ephemeral reply after it replaces the loading
+message with an ephemeral follow-up message. Call `defer_ephemeral` yourself to keep the
+loading message private.
 
-When a handler ends without a response, the bot logs a warning. When a handler gives an
-error and the interaction has no response, the bot answers with an ephemeral "An error
-occurred." message. An error hook turns this answer off.
+The timer starts only for an interaction that has a handler. Autocomplete interactions
+have no timer.
+
+## Failed handlers
+
+When a handler ends without a response, the bot logs a warning.
+
+When a handler gives an error or panics, the bot logs the error (or gives it to the
+`on_error` hook). Then it sends a default response that fits the response state:
+
+| State | Default response |
+|---|---|
+| `Pending` (autocomplete) | Empty choices |
+| `Pending` | An ephemeral "An error occurred." message |
+| `Deferred` | An edit of the loading message to "An error occurred." |
+| `DeferredUpdate` | An ephemeral follow-up message "An error occurred." |
+| `Updated`, `Responded` | Nothing |
+
+Set `BotBuilder::on_interaction_error` to answer yourself. Then the bot sends no default
+response, and the error does not go to `on_error`. See
+[Events and state](events.md#the-error-hooks).
 
 ## Ephemeral messages
 

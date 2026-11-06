@@ -44,7 +44,8 @@ facts:
 1. The event types of the handlers that you add with `on`.
 2. The event types that the cache needs for its resource types.
 3. `INTERACTION_CREATE` when the bot has commands, components, or modals.
-4. The application flags from `GET /applications/@me`.
+4. The event types of `BotBuilder::extra_events`, for example for collectors.
+5. The application flags from `GET /applications/@me`.
 
 The bot adds `MESSAGE_CONTENT` when a handler or the cache reads messages and the flag is
 on in the Developer Portal. The bot removes a privileged intent that is not on, and logs a

@@ -55,6 +55,18 @@ the user once and all guilds share it.
 `Cache::update` gives the previous value of a changed or removed object, as `Previous`.
 Use the cache without the framework to get it.
 
+## Guild events
+
+| Event | Effect on the cache |
+|---|---|
+| `GUILD_CREATE` | Adds the guild. For a known guild, it replaces the channels, threads, and roles. |
+| `GUILD_DELETE` with `unavailable: true` | An outage. The cache keeps the guild data and marks the guild unavailable. |
+| `GUILD_DELETE` without `unavailable` | The bot left the guild. The cache removes the guild and all its data. |
+| `READY` | Removes the guilds that the bot left while it was offline. |
+| `CHANNEL_DELETE` | Removes the channel, its threads, and its message buffer. |
+
+`Cache::is_guild_unavailable` tells if a guild has an outage.
+
 ## Permissions from the cache
 
 The cache computes permissions with the cached guild, roles, member, and channel.
@@ -101,6 +113,9 @@ the buffer is full, a new message removes the oldest message.
 - `BotBuilder::cache_messages(capacity)` sets the size. A size of 0 keeps no messages.
 - `channel_messages` gives the messages from the oldest to the newest.
 - Message updates, deletes, and reactions change the cached messages.
+- The cache keeps at most 10,000 message buffers (one for each channel). Above this
+  limit, it removes the tenth of the buffers with the oldest last message. DM channels
+  get no delete event, so without a limit each new DM adds a buffer.
 
 `cache_messages` alone turns on the cache with only the `MESSAGE` resource. After
 `cache(...)`, it changes only the size. Put `ResourceTypes::MESSAGE` in `cache(...)` to

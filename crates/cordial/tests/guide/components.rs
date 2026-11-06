@@ -1,9 +1,11 @@
 use std::time::Duration;
 
-use cordial::framework::{Bot, BoxError, Command, CommandContext, ComponentContext, Context, Error, Pattern};
+use cordial::framework::{
+    Bot, BoxError, Command, CommandContext, ComponentContext, Error, Pattern,
+};
 use cordial::http::Token;
 use cordial::model::component::{ActionRow, Button, ButtonStyle};
-use cordial::model::gateway::event::MessageCreate;
+use cordial::model::gateway::event::{EventType, MessageCreate};
 use cordial::model::interaction::InteractionMessage;
 
 // ANCHOR: format
@@ -32,7 +34,8 @@ async fn show_page(ctx: ComponentContext<()>) -> Result<(), BoxError> {
 struct Quiz;
 
 async fn quiz(ctx: CommandContext<()>, _: Quiz) -> Result<(), BoxError> {
-    ctx.reply("What is 6 times 7? Answer in 30 seconds.").await?;
+    ctx.reply("What is 6 times 7? Answer in 30 seconds.")
+        .await?;
 
     let user_id = ctx.user_id();
     let channel_id = ctx.channel_id()?;
@@ -57,8 +60,8 @@ async fn quiz(ctx: CommandContext<()>, _: Quiz) -> Result<(), BoxError> {
 fn with_collector(token: Token) -> Result<Bot<()>, Error> {
     Bot::builder(token)
         .command(quiz)
-        // A collector does not add intents. This handler makes the bot get the event.
-        .on(|_: Context<()>, _: MessageCreate| async {})
+        // No handler uses `MessageCreate`, so request it for the collector.
+        .extra_events([EventType::MessageCreate])
         .component("page:{number}", show_page)
         .build()
 }

@@ -2,6 +2,20 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.9.1
+
+Documentation only. The library behavior does not change.
+
+### Added
+
+- The guide book in `docs/guide` (mdBook): start, intents, commands, responses, components and modals, events and state, cache, HTTP, sharding, voice, HTTP interactions, and deploy. CI builds it.
+- The test crate `crates/cordial/tests/guide`: it compiles the code of the guide.
+- A crate-level example in each crate, and an example on each main type: `Client`, `ShardManager`, `Shard`, `Cache`, `Bot`, `BotBuilder`, `InteractionContext`, `Endpoint`, `VoiceManager`, `Call`, `Pattern`, `Command`, and `Modal`.
+
+### Changed
+
+- The voice examples use DAVE (`VoiceManager::with_e2ee`), because Discord needs it.
+
 ## 0.9.0
 
 Fixes from a review of the framework and the cache.

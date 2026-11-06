@@ -187,8 +187,9 @@ Add checks and a cooldown with `BotBuilder::command_with`:
 {{#include ../../../crates/cordial/tests/guide/commands.rs:checks}}
 ```
 
-The checks run in the order that you add them. The cooldown runs after the checks. The
-moderation example uses a permission check and a cooldown:
+The checks run in the order that you add them. The cooldown runs after the checks. A
+panic in a check gets the same error handling as a panic in the handler. The moderation
+example uses a permission check and a cooldown:
 
 ```rust
 {{#include ../../../crates/cordial/examples/moderation.rs:builder}}
@@ -266,10 +267,12 @@ has no local definition. The Entry Point command of an Activity stays, unless yo
 - `guilds` registers the command only in some guilds. A guild command shows at once. Use
   it for tests.
 - `dry_run(true)` makes the plan and writes it to the log, but sends no change.
+- `sync_guilds` names guilds to sync also when they have no commands now.
 
-The bot syncs the global scope and each guild scope that has commands. It does not sync a
-guild that has no commands in the code any more. To remove the old commands of such a
-guild, call the function `cordial::framework::sync::sync` with an empty list.
+The bot syncs the global scope and each guild scope that has commands. A guild that has
+no commands in the code any more is not synced, so its old commands stay. Give such a
+guild to `BotBuilder::sync_guilds`, for example after a command moves from a test guild
+to global. The sync then removes the old commands of the guild.
 
 `Bot::command_definitions` gives the definitions with the translations. Use it with the
 `sync` function to register the commands from a separate program.

@@ -48,10 +48,17 @@ Call `BotBuilder::state` before you add handlers, because the handlers use the s
 
 `Bot::context` gives a context before `run`, for example to start a task.
 
-## The error hook
+## The error hooks
 
-The error hook gets the errors and the panics of all handlers. A panic in a handler does
-not stop the bot.
+A panic in a handler does not stop the bot. The bot gives the errors and the panics to
+one of two hooks:
+
+| Hook | Gets | Use |
+|---|---|---|
+| `on_error` | `Context<S>` and the `HandlerError` | Event handlers, and interaction handlers without the second hook |
+| `on_interaction_error` | `InteractionContext<S>` and the `HandlerError` | Command, autocomplete, component, and modal handlers |
+
+Without hooks, the bot logs the errors.
 
 ```rust
 {{#include ../../../crates/cordial/tests/guide/events.rs:error_hook}}
@@ -60,12 +67,20 @@ not stop the bot.
 | `HandlerErrorKind` | Cause |
 |---|---|
 | `Error(error)` | The handler gave an error. |
-| `Panic(message)` | The handler panicked. |
+| `Panic(message)` | The handler or a check panicked. |
 | `Parse(error)` | The interaction data does not match the command definition. Sync the commands. |
 
-Without a hook, the bot logs the error. For an interaction without a response, it also
-sends an ephemeral "An error occurred." message. With a hook, the bot does not send this
-message. Send your own message from the hook when you need one.
+When an interaction handler fails and `on_interaction_error` is not set, the bot sends a
+default response that fits the response state. See
+[Responses](responses.md#failed-handlers). The interaction hook gets the interaction
+context, so it can answer the user itself:
+
+```rust
+{{#include ../../../crates/cordial/tests/guide/events.rs:interaction_error}}
+```
+
+With `on_interaction_error`, the bot sends no default response, and the interaction errors
+do not go to `on_error`.
 
 ## Event order
 

@@ -125,9 +125,10 @@ The poll example waits for the "Close" button of the author:
 {{#include ../../../crates/cordial/examples/poll.rs:collector}}
 ```
 
-A collector does not change the intents or the event filter of the bot. The bot gets an
-event type only when a handler or the cache needs it. Add a handler for the event type
-that the collector waits for:
+The bot requests an event type from the gateway only when a handler or the cache needs
+it. A collector does not add its type. When no handler uses the type of a collector,
+request the type with `BotBuilder::extra_events`. The bot then also adds the intent. A
+collector of a type that the bot does not request logs a warning.
 
 ```rust
 {{#include ../../../crates/cordial/tests/guide/components.rs:wait_for}}
@@ -136,5 +137,6 @@ that the collector waits for:
 The message content in this example needs the `MESSAGE_CONTENT` intent. See
 [Intents](intents.md).
 
-Collectors work only with gateway events. A bot that gets interactions over HTTP gets no
-collector events. See [HTTP interactions](http-interactions.md).
+A bot that gets interactions over HTTP gives them to the collectors too, so
+`wait_for_component` and `wait_for_modal` work. Collectors of gateway events need the
+gateway. See [HTTP interactions](http-interactions.md).

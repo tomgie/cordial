@@ -74,9 +74,9 @@ when the command does not show. For quick tests, register the command in one gui
 A handler returns `()` or `Result<(), E>`, where `E` converts into `BoxError`. Thus `?`
 works for all error types of the library.
 
-When a handler gives an error, the bot logs it. When the interaction has no response,
-the bot also answers with an ephemeral "An error occurred." message. Set an error hook to
-change this. See [Events and state](events.md#the-error-hook).
+When a handler gives an error, the bot logs it. It also tells the user, for example with
+an ephemeral "An error occurred." message. Set an error hook to change this. See
+[Events and state](events.md#the-error-hooks).
 
 ## Logs
 

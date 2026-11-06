@@ -7,8 +7,9 @@ components:
 - The bot needs no gateway connection and no shards.
 - The bot can run on a serverless platform or behind a load balancer.
 
-The bot gets no gateway events. Event handlers, the cache, and collectors do not work
-without the gateway.
+The bot gets no gateway events. Event handlers, the cache, and collectors of gateway events
+do not work without the gateway. Interaction collectors (`wait_for_component` and
+`wait_for_modal`) work, because the HTTP interactions go to the collectors first.
 
 ## The endpoint crate
 

@@ -17,8 +17,8 @@ fn make_client() -> Result<Client, std::env::VarError> {
 
 // ANCHOR: send
 async fn send_report(client: &Client, channel_id: ChannelId) -> Result<MessageId, Error> {
-    let file = FileUpload::new("report.txt", b"All systems work.".as_slice())
-        .content_type("text/plain");
+    let file =
+        FileUpload::new("report.txt", b"All systems work.".as_slice()).content_type("text/plain");
     let embed = Embed::new()
         .title("Daily report")
         .description("The report is in the file.");

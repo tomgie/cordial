@@ -257,8 +257,8 @@ Exit: a music example plays a file in a DAVE call for 1 hour with Discord client
 - [ ] Benchmarks: event decode rate, cache memory, rate limiter overhead.
 - [x] Soak test, synthetic: 1000 guilds and 500,000 events through the cache, with a shadow model and a leak check (`crates/cordial-cache/tests/soak.rs`).
 - [ ] Soak test, live: 1000+ guilds on a test application, or a recorded large-bot event log. Needs a bot token.
-- [ ] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
-- [ ] Rustdoc for every public item, with an example on each main type.
+- [x] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
+- [x] Rustdoc for every public item, with an example on each main type.
 - [x] Public API review: names, `#[non_exhaustive]`, sealed traits, error types (`CONTRIBUTING.md`, `crates/cordial/tests/api.rs`).
 - [x] Security review: token handling, signature verification, input limits (`SECURITY.md`).
 - [x] Release process: changelog, version bump in all crates, publish order (`RELEASING.md`, `cargo xtask release-check`).

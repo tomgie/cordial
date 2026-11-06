@@ -4,8 +4,8 @@ use cordial::framework::command::{Mentionable, ResolvedUser};
 use cordial::framework::localize::LocalizationKey;
 use cordial::framework::sync::{SyncOptions, SyncStrategy};
 use cordial::framework::{
-    Bot, BoxError, Check, CheckFailure, Choice, Command, CommandContext, CommandGroup,
-    CommandSync, Cooldown, CooldownScope, Error, Focused, InteractionContext,
+    Bot, BoxError, Check, CheckFailure, Choice, Command, CommandContext, CommandGroup, CommandSync,
+    Cooldown, CooldownScope, Error, Focused, InteractionContext,
 };
 use cordial::http::Token;
 use cordial::model::channel::Channel;
@@ -19,7 +19,11 @@ use cordial::model::message::Attachment;
 #[derive(Command)]
 #[command(name = "remind", description = "Set a reminder")]
 struct Remind {
-    #[option(description = "What to remind you of", min_length = 1, max_length = 200)]
+    #[option(
+        description = "What to remind you of",
+        min_length = 1,
+        max_length = 200
+    )]
     text: String,
     #[option(description = "Minutes from now", min_value = 1, max_value = 1440)]
     minutes: u16,
@@ -115,7 +119,9 @@ fn in_business_hours() -> Check<()> {
         if (8..18).contains(&hour) {
             Ok(())
         } else {
-            Err(CheckFailure::new("Use this command from 08:00 to 18:00 UTC."))
+            Err(CheckFailure::new(
+                "Use this command from 08:00 to 18:00 UTC.",
+            ))
         }
     })
 }
@@ -209,6 +215,7 @@ fn with_localizer(token: Token) -> Result<Bot<()>, Error> {
 
 // ANCHOR: sync
 const TEST_GUILD: GuildId = GuildId::new_const(5678);
+const OLD_TEST_GUILD: GuildId = GuildId::new_const(9012);
 
 fn with_sync_settings(token: Token) -> Result<Bot<()>, Error> {
     let options = SyncOptions::new()
@@ -216,6 +223,8 @@ fn with_sync_settings(token: Token) -> Result<Bot<()>, Error> {
         .dry_run(true);
     Bot::builder(token)
         .command_sync(CommandSync::OnStart(options))
+        // No command uses this guild now. The sync removes its old commands.
+        .sync_guilds([OLD_TEST_GUILD])
         // The command was `/colour` before. The sync renames it and keeps its ID.
         .command_with(pick_color, |settings| {
             settings.previous_name("colour").guilds([TEST_GUILD])

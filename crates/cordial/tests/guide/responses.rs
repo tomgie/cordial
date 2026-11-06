@@ -19,14 +19,15 @@ async fn report(ctx: CommandContext<()>, _: Report) -> Result<(), BoxError> {
 
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    // After a defer, `reply` edits the original response. The defer made it ephemeral.
+    // After a defer, `reply` edits the original response. The visibility must match the
+    // defer: else the bot deletes the loading message and sends a follow-up message.
     let embed = Embed::new()
         .title("Report")
         .description("All systems work.");
-    ctx.reply(embed).await?;
+    ctx.reply(embed).ephemeral().await?;
 
     // Now the interaction has a response, so `reply` sends a follow-up message.
-    ctx.reply("A second message.").await?;
+    ctx.reply("A second message.").ephemeral().await?;
 
     // `edit_reply` changes the first message again.
     ctx.edit_reply(InteractionMessage::text("The report is old."))

@@ -108,9 +108,9 @@ impl ResponseTracker {
 ///     ctx.defer_ephemeral().await?;
 ///     let embed = Embed::new().title("Report").description("All systems work.");
 ///     // After the defer, `reply` edits the original response.
-///     ctx.reply(embed).await?;
+///     ctx.reply(embed).ephemeral().await?;
 ///     // Now `reply` sends a follow-up message.
-///     ctx.reply("A second message.").await?;
+///     ctx.reply("A second message.").ephemeral().await?;
 ///     Ok(())
 /// }
 /// ```

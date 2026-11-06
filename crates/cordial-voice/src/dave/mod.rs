@@ -29,6 +29,9 @@ pub mod fuzzing;
 mod mls;
 mod provider;
 mod ratchet;
+#[cfg(any(test, feature = "test-gateway"))]
+#[doc(hidden)]
+pub mod test_gateway;
 
 #[cfg(test)]
 mod tests;

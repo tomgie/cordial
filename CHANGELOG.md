@@ -2,6 +2,13 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.11.2
+
+### Added
+
+- Crate `libdave-interop` (`interop/libdave`, not published): interoperability tests of the DAVE session against Discord's libdave. The tests load the libdave shared library at run time. Each library accepts the commits and Welcomes of the other, and frames pass both ways.
+- `cordial-voice` feature `test-gateway` (internal): a test stand-in for the DAVE external sender of the voice gateway. It is not part of the public API.
+
 ## 0.11.1
 
 ### Added

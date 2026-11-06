@@ -1,10 +1,10 @@
 //! A local simulation of a DAVE call. A test helper plays the voice gateway.
 
-use openmls::prelude::tls_codec::{Deserialize as _, Serialize as _, Size as _};
+use openmls::prelude::tls_codec::{Deserialize as _, Serialize as _};
 use openmls::prelude::*;
 use serde_json::json;
 
-use super::provider::{DaveProvider, SignatureKeyPair};
+use super::test_gateway::{TestGateway as Gateway, split_commit_welcome, with_transition};
 use super::*;
 
 const CHANNEL: ChannelId = ChannelId::new_const(1_234_567_890_123);
@@ -16,93 +16,6 @@ const DAVE: UserId = UserId::new_const(444_444_444_444_444_444);
 const OPUS_FRAME: &[u8] = &[
     0x78, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A,
 ];
-
-/// The voice gateway: the MLS delivery service and external sender.
-struct Gateway {
-    provider: DaveProvider,
-    signer: SignatureKeyPair,
-    group_id: GroupId,
-    epoch: u64,
-}
-
-impl Gateway {
-    fn new() -> Self {
-        Self {
-            provider: DaveProvider::default(),
-            signer: SignatureKeyPair::generate().unwrap(),
-            group_id: GroupId::from_slice(&CHANNEL.get().to_be_bytes()),
-            epoch: 0,
-        }
-    }
-
-    /// The payload of opcode 25.
-    fn external_sender(&self) -> Vec<u8> {
-        let credential: Credential = BasicCredential::new(vec![0x00, 0x01, 0x01, 0x00]).into();
-        ExternalSender::new(self.signer.public().into(), credential)
-            .tls_serialize_detached()
-            .unwrap()
-    }
-
-    /// The payload of opcode 27 with Add proposals for key packages (opcode 26 payloads).
-    fn propose_adds(&self, key_packages: &[&[u8]]) -> Vec<u8> {
-        let messages: Vec<MlsMessageOut> = key_packages
-            .iter()
-            .map(|bytes| {
-                let key_package = KeyPackageIn::tls_deserialize_exact(*bytes)
-                    .unwrap()
-                    .validate(self.provider.crypto(), ProtocolVersion::Mls10)
-                    .unwrap();
-                ExternalProposal::new_add::<DaveProvider>(
-                    key_package,
-                    self.group_id.clone(),
-                    GroupEpoch::from(self.epoch),
-                    &self.signer,
-                    SenderExtensionIndex::new(0),
-                )
-                .unwrap()
-            })
-            .collect();
-        append_payload(&messages)
-    }
-
-    /// The payload of opcode 27 with a Remove proposal.
-    fn propose_remove(&self, leaf_index: LeafNodeIndex) -> Vec<u8> {
-        let message = ExternalProposal::new_remove::<DaveProvider>(
-            leaf_index,
-            self.group_id.clone(),
-            GroupEpoch::from(self.epoch),
-            &self.signer,
-            SenderExtensionIndex::new(0),
-        )
-        .unwrap();
-        append_payload(&[message])
-    }
-}
-
-fn append_payload(messages: &[MlsMessageOut]) -> Vec<u8> {
-    let mut payload = vec![0];
-    payload.extend(messages.to_vec().tls_serialize_detached().unwrap());
-    payload
-}
-
-/// Splits the payload of opcode 28 into the commit and the optional Welcome.
-fn split_commit_welcome(payload: &[u8]) -> (Vec<u8>, Option<Vec<u8>>) {
-    let mut reader = payload;
-    let commit = MlsMessageIn::tls_deserialize(&mut reader).unwrap();
-    let commit_size = commit.tls_serialized_len();
-    let rest = &payload[commit_size..];
-    if rest.is_empty() {
-        return (payload.to_vec(), None);
-    }
-    Welcome::tls_deserialize_exact(rest).unwrap();
-    (payload[..commit_size].to_vec(), Some(rest.to_vec()))
-}
-
-fn with_transition(transition_id: u16, body: &[u8]) -> Vec<u8> {
-    let mut payload = transition_id.to_be_bytes().to_vec();
-    payload.extend_from_slice(body);
-    payload
-}
 
 fn binary(messages: &[E2eeOutgoing], expected_op: u8) -> Vec<u8> {
     let found: Vec<&Vec<u8>> = messages
@@ -189,7 +102,7 @@ fn three_member_group(gateway: &mut Gateway) -> (DaveSession, DaveSession, DaveS
 
 #[test]
 fn full_call_encrypts_between_members_and_excludes_removed_member() {
-    let mut gateway = Gateway::new();
+    let mut gateway = Gateway::new(CHANNEL.get());
     let (mut alice, mut bob, mut carol) = three_member_group(&mut gateway);
 
     // Each member decrypts the frames of each other member.
@@ -208,7 +121,7 @@ fn full_call_encrypts_between_members_and_excludes_removed_member() {
 
     // Carol leaves. The gateway proposes her removal to Alice and Bob. Both commit, and the
     // gateway selects the commit of Alice.
-    let carol_leaf = alice.mls.leaf_index_of(CAROL.get()).unwrap();
+    let carol_leaf = alice.mls.leaf_index_of(CAROL.get()).unwrap().u32();
     alice.client_disconnect(CAROL);
     bob.client_disconnect(CAROL);
     let proposals = gateway.propose_remove(carol_leaf);
@@ -281,7 +194,7 @@ fn own_commit_and_foreign_commit_in_pending_groups() {
     // Two pending members both commit the same proposal. The gateway selects Bob's commit.
     // Alice gets an Add proposal for Bob, and Bob gets one for Alice. Thus each one makes a
     // group. Alice then gets Bob's Welcome.
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, alice_key_package) = join(&gateway, ALICE, &[BOB]);
     let (mut bob, bob_key_package) = join(&gateway, BOB, &[ALICE]);
 
@@ -322,7 +235,7 @@ fn own_commit_and_foreign_commit_in_pending_groups() {
 
 #[test]
 fn foreign_commit_before_welcome_is_invalid() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, alice_key_package) = join(&gateway, ALICE, &[BOB]);
     let (mut bob, bob_key_package) = join(&gateway, BOB, &[ALICE]);
 
@@ -344,12 +257,12 @@ fn foreign_commit_before_welcome_is_invalid() {
 
 #[test]
 fn welcome_with_other_external_sender_is_invalid() {
-    let mut gateway = Gateway::new();
+    let mut gateway = Gateway::new(CHANNEL.get());
     let (mut alice, _) = join(&gateway, ALICE, &[BOB]);
     let (mut bob, bob_key_package) = join(&gateway, BOB, &[ALICE]);
 
     // Bob got the external sender of another gateway.
-    let other_gateway = Gateway::new();
+    let other_gateway = Gateway::new(CHANNEL.get());
     bob.binary_message(25, &other_gateway.external_sender())
         .unwrap();
 
@@ -373,7 +286,7 @@ fn welcome_with_other_external_sender_is_invalid() {
 
 #[test]
 fn add_for_unknown_user_is_refused() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, _) = join(&gateway, ALICE, &[BOB]);
     let (_dave, dave_key_package) = join(&gateway, DAVE, &[ALICE]);
 
@@ -389,7 +302,7 @@ fn add_for_unknown_user_is_refused() {
 
 #[test]
 fn revoked_proposal_gives_no_commit() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, _) = join(&gateway, ALICE, &[BOB]);
     let (_bob, bob_key_package) = join(&gateway, BOB, &[ALICE]);
 
@@ -409,11 +322,11 @@ fn revoked_proposal_gives_no_commit() {
 
 #[test]
 fn invalid_commit_resets_the_group() {
-    let mut gateway = Gateway::new();
+    let mut gateway = Gateway::new(CHANNEL.get());
     let (mut alice, mut bob, _carol) = three_member_group(&mut gateway);
 
     // Proposals are pending, but the commit is garbage.
-    let carol_leaf = alice.mls.leaf_index_of(CAROL.get()).unwrap();
+    let carol_leaf = alice.mls.leaf_index_of(CAROL.get()).unwrap().u32();
     alice.client_disconnect(CAROL);
     alice
         .binary_message(27, &gateway.propose_remove(carol_leaf))
@@ -449,7 +362,7 @@ fn version_zero_passes_through() {
 
 #[test]
 fn downgrade_to_version_zero() {
-    let mut gateway = Gateway::new();
+    let mut gateway = Gateway::new(CHANNEL.get());
     let (mut alice, mut bob, _carol) = three_member_group(&mut gateway);
 
     let output = alice
@@ -471,7 +384,7 @@ fn downgrade_to_version_zero() {
 
 #[test]
 fn prepare_epoch_one_makes_new_key_package() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, _) = join(&gateway, ALICE, &[]);
     let output = alice
         .json_message(24, &json!({ "protocol_version": 1, "epoch": 1 }))
@@ -504,7 +417,7 @@ fn prepare_epoch_one_makes_new_key_package() {
 
 #[test]
 fn silence_frame_passes_both_ways() {
-    let mut gateway = Gateway::new();
+    let mut gateway = Gateway::new(CHANNEL.get());
     let (mut alice, mut bob, _carol) = three_member_group(&mut gateway);
     let silence = [0xF8, 0xFF, 0xFE];
     assert_eq!(alice.encrypt(&silence).unwrap(), silence);
@@ -514,7 +427,7 @@ fn silence_frame_passes_both_ways() {
 
 #[test]
 fn key_package_has_required_parameters() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (_alice, key_package) = join(&gateway, ALICE, &[]);
     let key_package = KeyPackageIn::tls_deserialize_exact(key_package.as_slice())
         .unwrap()
@@ -557,7 +470,7 @@ fn key_package_signature_verifies_independently() {
     use p256::ecdsa::signature::Verifier as _;
     use p256::ecdsa::{Signature, VerifyingKey};
 
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (_alice, bytes) = join(&gateway, ALICE, &[]);
     let key_package = KeyPackageIn::tls_deserialize_exact(bytes.as_slice())
         .unwrap()
@@ -593,7 +506,7 @@ fn key_package_signature_verifies_independently() {
 
 #[test]
 fn malformed_messages_give_errors() {
-    let gateway = Gateway::new();
+    let gateway = Gateway::new(CHANNEL.get());
     let (mut alice, _) = join(&gateway, ALICE, &[BOB]);
 
     assert!(alice.binary_message(99, &[]).is_err());

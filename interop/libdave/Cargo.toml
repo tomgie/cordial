@@ -1,0 +1,29 @@
+[package]
+name = "libdave-interop"
+description = "Interoperability tests of the cordial DAVE implementation against Discord's libdave."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+libloading = "0.8"
+
+[dev-dependencies]
+cordial-model.workspace = true
+cordial-voice = { workspace = true, features = ["test-gateway"] }
+serde_json.workspace = true
+
+# The workspace forbids unsafe code. This crate calls libdave through FFI, so it has its own
+# lints. Each unsafe block must have a safety comment.
+[lints.rust]
+missing_docs = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+unreachable_pub = "warn"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"

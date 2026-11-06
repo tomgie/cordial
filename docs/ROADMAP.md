@@ -234,7 +234,7 @@ DAVE:
 - [x] Transitions: prepare, execute, ready, prepare epoch, invalid commit/welcome recovery.
 - [x] Per-sender hash ratchet, generations, nonce wrap, 10 s retention of old keys.
 - [x] Frame encryption and decryption: truncated tag, ULEB128 nonce, unencrypted ranges, supplemental size, `0xFAFA` marker, silence passthrough, replay rejection.
-- [ ] Interoperability tests against `libdave`.
+- [x] Interoperability tests against `libdave` (`interop/libdave`). 6/6 pass against libdave commit 6396c90.
 - [ ] Test in a real voice channel with Discord clients.
 
 Audio:

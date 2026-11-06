@@ -18,6 +18,9 @@ opus = ["dep:opus"]
 symphonia = ["opus", "dep:symphonia"]
 # Internal: exposes the DAVE frame codec for fuzz targets. It is not part of the public API.
 fuzzing = []
+# Internal: exposes a test stand-in for the DAVE external sender of the voice gateway, for the
+# libdave interoperability tests. It is not part of the public API.
+test-gateway = []
 
 [dependencies]
 cordial-model.workspace = true

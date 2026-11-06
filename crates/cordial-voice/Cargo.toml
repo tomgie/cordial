@@ -9,9 +9,33 @@ categories.workspace = true
 keywords.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+# Opus encode and decode through libopus (C library, built with CMake). It is necessary to
+# send PCM and to decode received audio. Ogg Opus passthrough works without it.
+opus = ["dep:opus"]
+# Decode common audio formats (MP3, FLAC, WAV, Vorbis, AAC) with symphonia. Needs `opus`.
+symphonia = ["opus", "dep:symphonia"]
+
 [dependencies]
 cordial-model.workspace = true
+cordial-http.workspace = true
 cordial-gateway.workspace = true
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+futures-util.workspace = true
+opus = { version = "0.4", optional = true }
+serde.workspace = true
+serde_json.workspace = true
+symphonia = { version = "0.5", optional = true, default-features = false, features = ["mp3", "flac", "wav", "pcm", "vorbis", "ogg", "aac", "isomp4"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "net"] }
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util", "net"] }
 
 [lints]
 workspace = true

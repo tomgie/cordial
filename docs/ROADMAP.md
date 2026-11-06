@@ -124,29 +124,29 @@ Exit (open: needs a bot token and a test guild): a test bot with 4 shards runs f
 
 Model:
 
-- [ ] Interaction object, types, contexts, integration types, `authorizing_integration_owners`.
-- [ ] Command data, resolved data, options (all 11 types), autocomplete focus.
-- [ ] Callback types 1..12 and response bodies. Callback response object (`with_response`).
-- [ ] Components: all 20 types (1..14, 17, 18, 19, 21, 22, 23) with `Unknown`. Unfurled media item, content scan flags.
-- [ ] Modal submit data shapes (Label, Text Display, all inputs).
-- [ ] Application command object, option object, choices, localizations, permissions.
+- [x] Interaction object, types, contexts, integration types, `authorizing_integration_owners`.
+- [x] Command data, resolved data, options (all 11 types), autocomplete focus.
+- [x] Callback types 1..12 and response bodies. Callback response object (`with_response`).
+- [x] Components: all 20 types (1..14, 17, 18, 19, 21, 22, 23) with `Unknown`. Unfurled media item, content scan flags.
+- [x] Modal submit data shapes (Label, Text Display, all inputs).
+- [x] Application command object, option object, choices, localizations, permissions.
 
 HTTP:
 
-- [ ] Interaction callback, original response (get, edit, delete), follow-ups (create, get, edit, delete).
-- [ ] Application command endpoints (global and guild, bulk overwrite) and permission endpoints.
+- [x] Interaction callback, original response (get, edit, delete), follow-ups (create, get, edit, delete).
+- [x] Application command endpoints (global and guild, bulk overwrite) and permission endpoints.
 
 Builders and validation:
 
-- [ ] Message builder (V1 and V2), embed builder, component builders, modal builder, command builder.
-- [ ] Limits: 40 components, flag rules for IS_COMPONENTS_V2, 5 action rows, modal 1..5 children, command 8000 characters, name regex.
+- [x] Message builder (V1 and V2), embed builder, component builders, modal builder, command builder.
+- [x] Limits: 40 components, flag rules for IS_COMPONENTS_V2, 5 action rows, modal 1..5 children, command 8000 characters, name regex.
 
 Endpoint crate:
 
-- [ ] Ed25519 verification, timestamp age check.
-- [ ] PING/PONG, inline reply, 202 deferral.
-- [ ] Webhook events: envelope, PING (204), all event types.
-- [ ] `axum` and `hyper` adapters.
+- [x] Ed25519 verification, timestamp age check.
+- [x] PING/PONG, inline reply, 202 deferral.
+- [x] Webhook events: envelope, PING (204), all event types.
+- [x] `axum` and `hyper` adapters.
 
 Exit: one example bot answers commands over the gateway. A second example answers the same commands over HTTP.
 
@@ -190,28 +190,28 @@ Exit: the examples run. The first public preview (`0.1.0`) is possible here, wit
 
 All 245 operations in [research/endpoints.txt](research/endpoints.txt). Groups:
 
-- [ ] Application (3), application role connection metadata (2), application identity profile (5).
-- [ ] Audit log (1).
-- [ ] Auto moderation (5).
-- [ ] Channel (26): with permission endpoints, voice status, threads, followers, typing, group DM recipients.
-- [ ] Message (20): with search, new pin routes, reactions, bulk delete, crosspost. Old pin routes marked deprecated.
-- [ ] Poll (2).
-- [ ] Emoji (10): guild and application emojis.
-- [ ] Entitlement (5), SKU (1), subscription (2).
-- [ ] Guild (47): members, bans, bulk ban, roles, role member counts, permission endpoints, prune, widget, onboarding, welcome screen, incident actions, vanity URL.
-- [ ] Guild scheduled event (6).
-- [ ] Guild template (6).
-- [ ] Invite (9): with target users (CSV upload and download) and job status.
-- [ ] Lobby (16).
-- [ ] Soundboard (7).
-- [ ] Stage instance (4).
-- [ ] Sticker (8).
-- [ ] User (12): with the `shard` parameter on Get Current User Guilds for large bots.
-- [ ] Voice (5).
-- [ ] Webhook (15): execute with `wait`, `thread_id`, `with_components`; Slack and GitHub compatible.
-- [ ] OAuth2: authorization code (with PKCE), refresh, revoke, client credentials, bot and advanced bot authorization URLs, `iss` check, `GET /oauth2/@me`.
-- [ ] Pagination helpers: streams over messages, members, bans, audit log, entitlements, archived threads, reactions, pins.
-- [ ] `xtask spec-check` reports 0 missing endpoints.
+- [x] Application (3), application role connection metadata (2), application identity profile (5).
+- [x] Audit log (1).
+- [x] Auto moderation (5).
+- [x] Channel (26): with permission endpoints, voice status, threads, followers, typing, group DM recipients.
+- [x] Message (20): with search, new pin routes, reactions, bulk delete, crosspost. Old pin routes marked deprecated.
+- [x] Poll (2).
+- [x] Emoji (10): guild and application emojis.
+- [x] Entitlement (5), SKU (1), subscription (2).
+- [x] Guild (47): members, bans, bulk ban, roles, role member counts, permission endpoints, prune, widget, onboarding, welcome screen, incident actions, vanity URL.
+- [x] Guild scheduled event (6).
+- [x] Guild template (6).
+- [x] Invite (9): with target users (CSV upload and download) and job status.
+- [x] Lobby (16).
+- [x] Soundboard (7).
+- [x] Stage instance (4).
+- [x] Sticker (8).
+- [x] User (12): with the `shard` parameter on Get Current User Guilds for large bots.
+- [x] Voice (5).
+- [x] Webhook (15): execute with `wait`, `thread_id`, `with_components`; Slack and GitHub compatible.
+- [x] OAuth2: authorization code (with PKCE), refresh, revoke, client credentials, bot and advanced bot authorization URLs, `iss` check, `GET /oauth2/@me`.
+- [x] Pagination helpers: streams over messages, members, bans, audit log, entitlements, archived threads, reactions, pins.
+- [x] `xtask spec-check` reports 0 missing endpoints.
 
 Exit: the coverage report is complete. Each endpoint has at least one test with the fake transport.
 

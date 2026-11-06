@@ -1,0 +1,41 @@
+error: all choices must have values of one type: strings, integers, or floats
+ --> tests/ui/choice_and_modal.rs:7:22
+  |
+7 |     #[choice(value = "two")]
+  |                      ^^^^^
+
+error: give a number `value` to each choice, because one choice has a number value
+ --> tests/ui/choice_and_modal.rs:9:5
+  |
+9 |     Three,
+  |     ^^^^^
+
+error: the title has 49 characters; it must have 1 to 45
+  --> tests/ui/choice_and_modal.rs:13:17
+   |
+13 | #[modal(title = "A title that is much too long for a Discord modal")]
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: a modal field must be `String` or `Option<String>`; only text inputs are supported for now
+  --> tests/ui/choice_and_modal.rs:16:10
+   |
+16 |     age: u32,
+   |          ^^^
+
+error: the style must be "short" or "paragraph"
+  --> tests/ui/choice_and_modal.rs:17:37
+   |
+17 |     #[field(label = "Name", style = "large")]
+   |                                     ^^^^^^^
+
+error: add `#[subcommand(description = "...")]` or `#[group(description = "...")]` to this variant
+  --> tests/ui/choice_and_modal.rs:23:5
+   |
+23 |     Missing,
+   |     ^^^^^^^
+
+error: use one unnamed field, like `Variant(Options)`, or no field
+  --> tests/ui/choice_and_modal.rs:25:11
+   |
+25 |     Named { value: String },
+   |           ^^^^^^^^^^^^^^^^^

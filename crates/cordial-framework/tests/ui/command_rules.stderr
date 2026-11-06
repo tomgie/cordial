@@ -1,0 +1,47 @@
+error: the name `Ban` has uppercase letters; use lowercase letters
+ --> tests/ui/command_rules.rs:4:18
+  |
+4 | #[command(name = "Ban", description = "Ban a member")]
+  |                  ^^^^^
+
+error: a required option must come before all optional options; move this field up or make it an `Option`
+  --> tests/ui/command_rules.rs:13:5
+   |
+13 |     second: String,
+   |     ^^^^^^
+
+error: an option needs `#[option(description = "...")]`
+  --> tests/ui/command_rules.rs:19:5
+   |
+19 |     value: String,
+   |     ^^^^^
+
+error: a chat input command needs `description = "..."`
+  --> tests/ui/command_rules.rs:17:18
+   |
+17 | #[command(name = "nodescription")]
+   |                  ^^^^^^^^^^^^^^^
+
+error: the description has 0 characters; it must have 1 to 100
+  --> tests/ui/command_rules.rs:25:28
+   |
+25 |     #[option(description = "", min_value = 5, max_value = 1)]
+   |                            ^^
+
+error: the minimum value is more than the maximum value
+  --> tests/ui/command_rules.rs:25:59
+   |
+25 |     #[option(description = "", min_value = 5, max_value = 1)]
+   |                                                           ^
+
+error: unknown key `colour` in `#[option]`; the known keys are: name, description, min_value, max_value, min_length, max_length, autocomplete, channel_types
+  --> tests/ui/command_rules.rs:27:55
+   |
+27 |     #[option(description = "Text", max_length = 7000, colour = 1)]
+   |                                                       ^^^^^^
+
+error: the max length must be from 1 to 6000
+  --> tests/ui/command_rules.rs:27:49
+   |
+27 |     #[option(description = "Text", max_length = 7000, colour = 1)]
+   |                                                 ^^^^

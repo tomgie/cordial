@@ -22,5 +22,9 @@ cordial-gateway.workspace = true
 cordial-cache.workspace = true
 cordial-macros.workspace = true
 
+[dev-dependencies]
+serde_json.workspace = true
+trybuild.workspace = true
+
 [lints]
 workspace = true

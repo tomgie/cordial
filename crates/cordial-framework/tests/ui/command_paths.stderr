@@ -1,0 +1,23 @@
+error[E0599]: no associated function or constant named `BAN_MEMBRES` found for struct `cordial_framework::__private::cordial_model::Permissions` in the current scope
+ --> tests/ui/command_paths.rs:4:75
+  |
+4 | #[command(name = "ban", description = "Ban", default_member_permissions = "BAN_MEMBRES")]
+  |                                                                           ^^^^^^^^^^^^^ associated function or constant not found in `cordial_framework::__private::cordial_model::Permissions`
+  |
+help: there is an associated constant `BAN_MEMBERS` with a similar name
+  |
+4 - #[command(name = "ban", description = "Ban", default_member_permissions = "BAN_MEMBRES")]
+4 + #[command(name = "ban", description = "Ban", default_member_permissions = BAN_MEMBERS)]
+  |
+
+error[E0599]: no variant, associated function, or constant named `Server` found for enum `cordial_framework::__private::cordial_model::interaction::InteractionContextType` in the current scope
+ --> tests/ui/command_paths.rs:8:61
+  |
+8 | #[command(name = "where", description = "Where", contexts = "guild, server")]
+  |                                                             ^^^^^^^^^^^^^^^ variant, associated function, or constant not found in `cordial_framework::__private::cordial_model::interaction::InteractionContextType`
+
+error[E0080]: evaluation panicked: the field of a message command must be a message target, for example `Message`
+  --> tests/ui/command_paths.rs:14:13
+   |
+14 |     target: cordial_framework::command::ResolvedUser,
+   |             ^^^^^^^^^^^^^^^^^ evaluation of `_` failed here

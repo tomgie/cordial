@@ -258,9 +258,9 @@ Exit: a music example plays a file in a DAVE call for 1 hour with Discord client
 - [ ] Soak test: 1000+ guilds on a test application, or a recorded large-bot event log.
 - [ ] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
 - [ ] Rustdoc for every public item, with an example on each main type.
-- [ ] Public API review: names, `#[non_exhaustive]`, sealed traits, error types.
+- [x] Public API review: names, `#[non_exhaustive]`, sealed traits, error types (`CONTRIBUTING.md`, `crates/cordial/tests/api.rs`).
 - [x] Security review: token handling, signature verification, input limits (`SECURITY.md`).
-- [ ] Release process: changelog, version bump in all crates, publish order.
+- [x] Release process: changelog, version bump in all crates, publish order (`RELEASING.md`, `cargo xtask release-check`).
 
 Exit: version `1.0.0` criteria are met (see below).
 

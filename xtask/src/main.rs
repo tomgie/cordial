@@ -5,6 +5,7 @@
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
 mod fixtures;
+mod release;
 mod spec_check;
 
 use std::path::PathBuf;
@@ -20,6 +21,8 @@ Tasks:
                         Compare the endpoints of cordial-http with the Discord OpenAPI
                         specification (specs/openapi.json of discord/discord-api-spec).
                         With --strict, fail when an operation is missing.
+  release-check         Check the versions, the crate metadata, and CHANGELOG.md, and print
+                        the publish order.
 ";
 
 fn main() -> ExitCode {
@@ -45,9 +48,34 @@ fn main() -> ExitCode {
                 }
             }
         }
+        ["release-check"] => release_check(),
         _ => {
             print!("{USAGE}");
             ExitCode::FAILURE
         }
     }
+}
+
+fn release_check() -> ExitCode {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let report = match release::run(&root) {
+        Ok(report) => report,
+        Err(error) => {
+            eprintln!("release-check: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    for problem in &report.problems {
+        eprintln!("release-check: {problem}");
+    }
+    if !report.problems.is_empty() {
+        return ExitCode::FAILURE;
+    }
+
+    println!("version {}: publish in this order:", report.version);
+    for (index, name) in report.order.iter().enumerate() {
+        println!("  {}. {name}", index + 1);
+    }
+    ExitCode::SUCCESS
 }

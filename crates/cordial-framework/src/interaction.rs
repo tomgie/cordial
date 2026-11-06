@@ -372,7 +372,7 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
     /// # Errors
     ///
     /// Gives an error when the request fails.
-    pub async fn get_reply(&self) -> Result<Message, ResponseError> {
+    pub async fn original_response(&self) -> Result<Message, ResponseError> {
         Ok(self
             .http()
             .original_interaction_response(self.interaction.application_id, self.token())

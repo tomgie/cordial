@@ -38,6 +38,7 @@ jobs:
       - run: cargo doc --workspace --all-features --no-deps
       # Fails when an endpoint of the specification is not implemented.
       - run: cargo xtask spec-check fixtures/spec/openapi.json --strict
+      - run: cargo xtask release-check
 
   features:
     name: Feature combinations

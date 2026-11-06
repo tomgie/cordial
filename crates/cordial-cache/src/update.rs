@@ -8,7 +8,7 @@ use cordial_model::channel::Channel;
 use cordial_model::gateway::event::{Event, GuildCreate};
 use cordial_model::gateway::presence::Presence;
 use cordial_model::guild::{Guild, Member, Role};
-use cordial_model::id::{GuildId, UserId};
+use cordial_model::id::{ChannelId, GuildId, UserId};
 use cordial_model::message::Message;
 use cordial_model::user::User;
 use cordial_model::voice::VoiceState;
@@ -58,6 +58,7 @@ impl Cache {
         match event {
             Event::Ready(ready) => {
                 self.set_current_user(&ready.user);
+                self.remove_stale_guilds(ready.shard, &ready.guilds);
                 for guild in &ready.guilds {
                     self.inner.unavailable_guilds.insert(guild.id, ());
                 }
@@ -81,6 +82,9 @@ impl Cache {
             Event::ChannelDelete(channel) => self.remove_channel(&channel.0),
             Event::ThreadDelete(channel) => self.remove_channel(&channel.0),
             Event::ThreadListSync(sync) => {
+                // The sync gives all active threads of the listed parents (or of the guild).
+                // Threads that are not in it are archived or gone.
+                self.remove_threads(sync.guild_id, sync.channel_ids.as_deref(), &sync.threads);
                 for thread in &sync.threads {
                     self.insert_channel_with_guild(thread, Some(sync.guild_id));
                 }
@@ -357,6 +361,7 @@ impl Cache {
             None
         };
 
+        self.remove_absent_channels_and_roles(guild);
         if let Some(channels) = &guild.channels {
             for channel in channels {
                 self.insert_channel_with_guild(channel, Some(guild_id));
@@ -463,10 +468,16 @@ impl Cache {
 
     fn remove_guild(&self, guild_id: GuildId, unavailable: bool) -> Option<Previous> {
         if unavailable {
+            // An outage: keep the data. The GUILD_CREATE after the outage replaces the
+            // channels and roles, and a large guild does not send all members again.
             self.inner.unavailable_guilds.insert(guild_id, ());
-        } else {
-            self.inner.unavailable_guilds.remove(&guild_id);
+            return None;
         }
+        self.inner.unavailable_guilds.remove(&guild_id);
+
+        remove_indexed(&self.inner.message_guilds, guild_id, |channel_id| {
+            self.inner.messages.remove(channel_id);
+        });
 
         remove_indexed(&self.inner.guild_channels, guild_id, |channel_id| {
             self.inner.channels.remove(channel_id);
@@ -536,7 +547,23 @@ impl Cache {
 
     fn remove_channel(&self, channel: &Channel) -> Option<Previous> {
         if let Some(guild_id) = channel.guild_id {
+            // Discord sends no THREAD_DELETE for the threads of a deleted channel.
+            if !channel.kind.is_thread() {
+                let threads: Vec<ChannelId> = self
+                    .guild_channel_ids(guild_id)
+                    .into_iter()
+                    .filter(|id| {
+                        crate::get(&self.inner.channels, id).is_some_and(|child| {
+                            child.kind.is_thread() && child.parent_id == Some(channel.id)
+                        })
+                    })
+                    .collect();
+                for thread_id in threads {
+                    self.remove_channel_id(guild_id, thread_id);
+                }
+            }
             index_remove(&self.inner.guild_channels, guild_id, &channel.id);
+            index_remove(&self.inner.message_guilds, guild_id, &channel.id);
         }
         self.inner.messages.remove(&channel.id);
         self.inner
@@ -614,6 +641,7 @@ impl Cache {
     fn remove_member(&self, guild_id: GuildId, user_id: UserId) -> Option<Previous> {
         index_remove(&self.inner.guild_members, guild_id, &user_id);
         self.inner.presences.remove(&(guild_id, user_id));
+        self.inner.voice_states.remove(&(guild_id, user_id));
         let removed = self.inner.members.remove(&(guild_id, user_id));
         self.release_user(user_id, guild_id);
         removed.map(|(_, member)| Previous::Member(member))
@@ -730,11 +758,137 @@ impl Cache {
         if !self.wants(ResourceTypes::MESSAGE) || self.inner.message_capacity == 0 {
             return;
         }
-        let mut messages = self.inner.messages.entry(message.channel_id).or_default();
-        if messages.len() >= self.inner.message_capacity {
-            messages.pop_front();
+        if let Some(guild_id) = message.guild_id {
+            index_insert(&self.inner.message_guilds, guild_id, message.channel_id);
         }
-        messages.push_back(Arc::new(message.clone()));
+        {
+            let mut messages = self.inner.messages.entry(message.channel_id).or_default();
+            if messages.len() >= self.inner.message_capacity {
+                messages.pop_front();
+            }
+            messages.push_back(Arc::new(message.clone()));
+        }
+        if self.inner.messages.len() > MAX_MESSAGE_CHANNELS {
+            self.evict_message_buffers();
+        }
+    }
+
+    /// Removes the tenth of the message buffers with the oldest last message.
+    fn evict_message_buffers(&self) {
+        let mut ages: Vec<(u64, ChannelId)> = self
+            .inner
+            .messages
+            .iter()
+            .map(|entry| {
+                let last = entry.back().map_or(0, |message| message.id.get());
+                (last, *entry.key())
+            })
+            .collect();
+        ages.sort_unstable();
+        for (_, channel_id) in ages.iter().take(MAX_MESSAGE_CHANNELS / 10) {
+            self.inner.messages.remove(channel_id);
+        }
+    }
+
+    fn guild_channel_ids(&self, guild_id: GuildId) -> Vec<ChannelId> {
+        self.inner
+            .guild_channels
+            .get(&guild_id)
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    fn remove_channel_id(&self, guild_id: GuildId, channel_id: ChannelId) {
+        index_remove(&self.inner.guild_channels, guild_id, &channel_id);
+        index_remove(&self.inner.message_guilds, guild_id, &channel_id);
+        self.inner.channels.remove(&channel_id);
+        self.inner.messages.remove(&channel_id);
+    }
+
+    /// Removes the cached threads of the parents (all parents for `None`) that are not in
+    /// the new list.
+    fn remove_threads(&self, guild_id: GuildId, parents: Option<&[ChannelId]>, keep: &[Channel]) {
+        let keep: HashSet<ChannelId> = keep.iter().map(|thread| thread.id).collect();
+        let stale: Vec<ChannelId> = self
+            .guild_channel_ids(guild_id)
+            .into_iter()
+            .filter(|id| !keep.contains(id))
+            .filter(|id| {
+                crate::get(&self.inner.channels, id).is_some_and(|channel| {
+                    channel.kind.is_thread()
+                        && parents.is_none_or(|parents| {
+                            channel
+                                .parent_id
+                                .is_some_and(|parent| parents.contains(&parent))
+                        })
+                })
+            })
+            .collect();
+        for thread_id in stale {
+            self.remove_channel_id(guild_id, thread_id);
+        }
+    }
+
+    /// Removes the channels, threads, and roles of a guild that a new GUILD_CREATE does not
+    /// have. They were deleted while the bot did not see the guild.
+    fn remove_absent_channels_and_roles(&self, guild: &Guild) {
+        let channels: HashSet<ChannelId> = guild
+            .channels
+            .iter()
+            .flatten()
+            .chain(guild.threads.iter().flatten())
+            .map(|channel| channel.id)
+            .collect();
+        for channel_id in self.guild_channel_ids(guild.id) {
+            if !channels.contains(&channel_id) {
+                self.remove_channel_id(guild.id, channel_id);
+            }
+        }
+
+        let roles: HashSet<_> = guild.roles.iter().map(|role| role.id).collect();
+        let cached_roles: Vec<_> = self
+            .inner
+            .guild_roles
+            .get(&guild.id)
+            .map(|set| set.iter().copied().collect())
+            .unwrap_or_default();
+        for role_id in cached_roles {
+            if !roles.contains(&role_id) {
+                index_remove(&self.inner.guild_roles, guild.id, &role_id);
+                self.inner.roles.remove(&role_id);
+            }
+        }
+    }
+
+    /// At READY, removes the cached guilds of this shard that the session does not have: the
+    /// bot left them while it was offline.
+    fn remove_stale_guilds(
+        &self,
+        shard: Option<[u32; 2]>,
+        guilds: &[cordial_model::guild::UnavailableGuild],
+    ) {
+        let [shard_id, shard_count] = shard.unwrap_or([0, 1]);
+        let current: HashSet<GuildId> = guilds.iter().map(|guild| guild.id).collect();
+        let on_shard = |guild_id: &GuildId| {
+            (guild_id.get() >> 22) % u64::from(shard_count.max(1)) == u64::from(shard_id)
+        };
+
+        let stale: Vec<GuildId> = self
+            .inner
+            .guilds
+            .iter()
+            .map(|entry| *entry.key())
+            .chain(
+                self.inner
+                    .unavailable_guilds
+                    .iter()
+                    .map(|entry| *entry.key()),
+            )
+            .filter(|guild_id| on_shard(guild_id) && !current.contains(guild_id))
+            .collect();
+        for guild_id in stale {
+            self.remove_guild(guild_id, false);
+        }
     }
 
     fn update_message(&self, message: &Message) -> Option<Previous> {
@@ -787,6 +941,10 @@ impl Cache {
         }
     }
 }
+
+/// The largest number of message buffers. DM channels get no delete event, so without a limit
+/// each new DM partner adds a buffer for ever.
+const MAX_MESSAGE_CHANNELS: usize = 10_000;
 
 /// Removes all keys of a guild from an index and runs `remove` for each.
 fn remove_indexed<K: Eq + Hash>(

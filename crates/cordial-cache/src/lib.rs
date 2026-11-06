@@ -131,6 +131,9 @@ impl ResourceTypes {
         }
         if self.contains(Self::MESSAGE) {
             kinds.extend([
+                // The delete events remove the message buffers of deleted channels.
+                EventType::ChannelDelete,
+                EventType::ThreadDelete,
                 EventType::MessageCreate,
                 EventType::MessageUpdate,
                 EventType::MessageDelete,
@@ -243,6 +246,9 @@ struct Inner {
     voice_states: DashMap<(GuildId, UserId), Arc<VoiceState>>,
     presences: DashMap<(GuildId, UserId), Arc<Presence>>,
     messages: DashMap<ChannelId, VecDeque<Arc<Message>>>,
+    // The guild of each message buffer, so that a guild removal removes its buffers also
+    // when the cache does not keep channels.
+    message_guilds: DashMap<GuildId, HashSet<ChannelId>>,
     stage_instances: DashMap<StageInstanceId, Arc<StageInstance>>,
     scheduled_events: DashMap<ScheduledEventId, Arc<ScheduledEvent>>,
     soundboard_sounds: DashMap<SoundboardSoundId, Arc<SoundboardSound>>,

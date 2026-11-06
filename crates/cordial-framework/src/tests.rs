@@ -310,3 +310,154 @@ fn message_json() -> Value {
         "attachments": [], "embeds": [], "pinned": false, "type": 0
     })
 }
+
+#[tokio::test]
+async fn ephemeral_reply_after_a_public_defer_stays_private() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    transport.push(FakeResponse::empty(204));
+    transport.push(FakeResponse::json(200, &message_json()));
+    let bot = start(
+        builder(&transport)
+            .slow_response(SlowResponse::Defer(Duration::from_millis(20)))
+            .command::<Ping, _, _, _>(|ctx: CommandContext<()>, _| async move {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                ctx.reply("secret").ephemeral().await
+            }),
+    );
+
+    dispatch(&bot, command("ping"));
+
+    let requests = requests(&transport, 3).await;
+    assert_eq!(requests[0].json(), json!({"type": 5}));
+    assert_eq!(requests[1].method, "DELETE");
+    assert_eq!(requests[2].method, "POST");
+    assert_eq!(requests[2].url, format!("{BASE}/webhooks/2/tok"));
+    assert_eq!(requests[2].json()["flags"], 64);
+}
+
+#[tokio::test]
+async fn error_after_defer_edits_the_loading_message() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    transport.push(FakeResponse::json(200, &message_json()));
+    let bot = start(builder(&transport).command::<Ping, _, _, _>(
+        |ctx: CommandContext<()>, _| async move {
+            ctx.defer().await?;
+            Err::<(), crate::BoxError>("broken".into())
+        },
+    ));
+
+    dispatch(&bot, command("ping"));
+
+    let requests = requests(&transport, 2).await;
+    assert_eq!(requests[1].method, "PATCH");
+    assert_eq!(requests[1].json()["content"], "An error occurred.");
+}
+
+#[tokio::test]
+async fn interaction_error_hook_gets_the_context() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    let bot = start(
+        builder(&transport)
+            .command::<Ping, _, _, _>(|_: CommandContext<()>, _| async { Err::<(), _>("broken") })
+            .on_interaction_error(|ctx, error: HandlerError| async move {
+                let _ = ctx.reply(format!("failed: {error}")).ephemeral().await;
+            }),
+    );
+
+    dispatch(&bot, command("ping"));
+
+    let requests = requests(&transport, 1).await;
+    let content = requests[0].json()["data"]["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        content.starts_with("failed: command `ping` failed"),
+        "{content}"
+    );
+}
+
+#[tokio::test]
+async fn panic_in_a_check_answers_the_user() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    let bot = start(builder(&transport).command_with::<Ping, _, _, _>(
+        |_: CommandContext<()>, _| async {},
+        |settings| {
+            settings.check(Check::new(|_: CommandContext<()>| async {
+                if true {
+                    panic!("bad check");
+                }
+                Ok(())
+            }))
+        },
+    ));
+
+    dispatch(&bot, command("ping"));
+
+    let requests = requests(&transport, 1).await;
+    assert_eq!(requests[0].json()["data"]["content"], "An error occurred.");
+}
+
+#[tokio::test]
+async fn update_after_a_reply_is_an_error() {
+    let transport = FakeTransport::new();
+    transport.push(FakeResponse::empty(204));
+    let result: Arc<Mutex<Option<bool>>> = Arc::default();
+    let sink = Arc::clone(&result);
+    let bot = start(
+        builder(&transport).component("button", move |ctx: ComponentContext<()>| {
+            let sink = Arc::clone(&sink);
+            async move {
+                ctx.reply("Saved").await?;
+                let update = ctx.update_message("new").await;
+                *sink.lock().await = Some(matches!(
+                    update,
+                    Err(crate::interaction::ResponseError::NotComponentMessage)
+                ));
+                Ok::<(), crate::BoxError>(())
+            }
+        }),
+    );
+
+    dispatch(
+        &bot,
+        interaction(3, &json!({"custom_id": "button", "component_type": 2})),
+    );
+
+    for _ in 0..200 {
+        if result.lock().await.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert_eq!(*result.lock().await, Some(true));
+    assert_eq!(transport.requests().len(), 1);
+}
+
+#[test]
+fn long_cooldown_does_not_panic() {
+    use crate::{Cooldown, CooldownScope};
+
+    let cooldown = Cooldown::new(
+        CooldownScope::Global,
+        Duration::from_secs(10 * 365 * 24 * 3600),
+    );
+    let transport = FakeTransport::new();
+    let bot = start(builder(&transport));
+    let raw = match &*command("ping") {
+        Event::InteractionCreate(created) => created.0.clone(),
+        _ => unreachable!(),
+    };
+    let context = crate::interaction::InteractionContext::new(
+        bot.context(),
+        Arc::new(raw),
+        crate::interaction::ResponseTracker::new(),
+    );
+
+    assert!(cooldown.try_use(&context).is_ok());
+    assert!(cooldown.try_use(&context).is_err());
+}

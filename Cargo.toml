@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
@@ -35,14 +35,14 @@ authors = ["cordial contributors"]
 
 # Internal crates. Keep each version equal to `workspace.package.version`.
 [workspace.dependencies]
-cordial-model = { path = "crates/cordial-model", version = "=0.7.0" }
-cordial-http = { path = "crates/cordial-http", version = "=0.7.0" }
-cordial-gateway = { path = "crates/cordial-gateway", version = "=0.7.0" }
-cordial-cache = { path = "crates/cordial-cache", version = "=0.7.0" }
-cordial-endpoint = { path = "crates/cordial-endpoint", version = "=0.7.0" }
-cordial-voice = { path = "crates/cordial-voice", version = "=0.7.0" }
-cordial-macros = { path = "crates/cordial-macros", version = "=0.7.0" }
-cordial-framework = { path = "crates/cordial-framework", version = "=0.7.0" }
+cordial-model = { path = "crates/cordial-model", version = "=0.9.0" }
+cordial-http = { path = "crates/cordial-http", version = "=0.9.0" }
+cordial-gateway = { path = "crates/cordial-gateway", version = "=0.9.0" }
+cordial-cache = { path = "crates/cordial-cache", version = "=0.9.0" }
+cordial-endpoint = { path = "crates/cordial-endpoint", version = "=0.9.0" }
+cordial-voice = { path = "crates/cordial-voice", version = "=0.9.0" }
+cordial-macros = { path = "crates/cordial-macros", version = "=0.9.0" }
+cordial-framework = { path = "crates/cordial-framework", version = "=0.9.0" }
 
 # External crates.
 serde = { version = "1", features = ["derive"] }

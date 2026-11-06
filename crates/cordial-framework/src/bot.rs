@@ -14,6 +14,7 @@ use cordial_model::gateway::command::UpdatePresence;
 use cordial_model::gateway::event::{
     Event, EventType, EventTypes, GatewayEvent, InteractionCreate,
 };
+use cordial_model::id::GuildId;
 use tokio::sync::mpsc;
 
 use crate::check::{Check, Cooldown};
@@ -22,7 +23,7 @@ use crate::component::{ComponentContext, Pattern};
 use crate::context::Context;
 use crate::error::{Error, HandlerError, HandlerErrorKind, IntoHandlerResult};
 use crate::intents::{self, IntentCheck, IntentInput};
-use crate::interaction::{CommandContext, SlowResponse};
+use crate::interaction::{CommandContext, InteractionContext, SlowResponse};
 use crate::localize::{self, Localizer};
 use crate::modal::Modal;
 use crate::router::{
@@ -186,6 +187,8 @@ pub struct BotBuilder<S> {
     shards: ShardRange,
     presence: Option<UpdatePresence>,
     sessions: HashMap<u32, Session>,
+    extra_events: EventTypes,
+    sync_guilds: Vec<GuildId>,
     problems: Vec<String>,
 }
 
@@ -238,6 +241,8 @@ pub struct Bot<S> {
     shards: ShardRange,
     presence: Option<UpdatePresence>,
     sessions: HashMap<u32, Session>,
+    extra_events: EventTypes,
+    sync_guilds: Vec<GuildId>,
 }
 
 impl<S> std::fmt::Debug for Bot<S> {
@@ -269,6 +274,8 @@ impl Bot<()> {
             shards: ShardRange::Recommended,
             presence: None,
             sessions: HashMap::new(),
+            extra_events: EventTypes::empty(),
+            sync_guilds: Vec::new(),
             problems: Vec::new(),
         }
     }
@@ -303,6 +310,8 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
             shards: self.shards,
             presence: self.presence,
             sessions: self.sessions,
+            extra_events: self.extra_events,
+            sync_guilds: self.sync_guilds,
             problems,
         }
     }
@@ -472,6 +481,42 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
         self.router.error_hook = Some(Arc::new(move |context, error| {
             Box::pin(hook(context, error))
         }));
+        self
+    }
+
+    /// Sets the hook for failed interaction handlers. It gets the interaction context, so it
+    /// can answer the user, for example with an ephemeral error message.
+    ///
+    /// With this hook, the bot does not send its default "An error occurred." response, and
+    /// the failure does not go to [`BotBuilder::on_error`].
+    #[must_use]
+    pub fn on_interaction_error<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(InteractionContext<S>, HandlerError) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.router.interaction_error_hook = Some(Arc::new(move |context, error| {
+            Box::pin(hook(context, error))
+        }));
+        self
+    }
+
+    /// Requests more event types from the gateway, for example for a collector
+    /// (`wait_for::<MessageReactionAdd>`) when no handler uses the type.
+    #[must_use]
+    pub fn extra_events(mut self, events: impl IntoIterator<Item = EventType>) -> Self {
+        for kind in events {
+            self.extra_events.insert(kind);
+        }
+        self
+    }
+
+    /// Syncs these guild scopes at each start, also when no command is registered there now.
+    /// The sync then removes old guild commands, for example after a command moves from a
+    /// test guild to global.
+    #[must_use]
+    pub fn sync_guilds(mut self, guilds: impl IntoIterator<Item = GuildId>) -> Self {
+        self.sync_guilds.extend(guilds);
         self
     }
 
@@ -648,6 +693,8 @@ impl<S: Send + Sync + 'static> BotBuilder<S> {
             shards: self.shards,
             presence: self.presence,
             sessions: self.sessions,
+            extra_events: self.extra_events,
+            sync_guilds: self.sync_guilds,
         })
     }
 }
@@ -713,6 +760,9 @@ impl<S: Send + Sync + 'static> Bot<S> {
         let mut scopes = self.command_definitions();
         // Remove the old global commands also when the bot has none now.
         scopes.entry(SyncScope::Global).or_default();
+        for guild_id in &self.sync_guilds {
+            scopes.entry(SyncScope::Guild(*guild_id)).or_default();
+        }
 
         for (scope, commands) in scopes {
             let report = crate::sync::sync(
@@ -732,6 +782,7 @@ impl<S: Send + Sync + 'static> Bot<S> {
     /// Gives the event types that the handlers and the cache need.
     fn event_types(&self) -> EventTypes {
         let mut types = self.router.event_types();
+        types.extend_from(self.extra_events);
         if let Some(resources) = self.resources {
             types.extend_from(resources.event_types());
         }
@@ -772,6 +823,11 @@ impl<S: Send + Sync + 'static> Bot<S> {
             .shards
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = manager.shards().to_vec();
+        self.context
+            .shared
+            .shard_count
+            .store(manager.shard_count(), std::sync::atomic::Ordering::Relaxed);
+        let _ = self.context.shared.event_types.set(events);
 
         let result = self.event_loop(&mut manager, intents, flags).await;
 
@@ -849,13 +905,14 @@ impl<S: Send + Sync + 'static> Bot<S> {
             cache.update(&event);
         }
 
-        let taken = self.context.shared.collectors.dispatch(&event);
-        if let Some(InteractionCreate(interaction)) = InteractionCreate::from_event_ref(&event)
-            && !taken
-            && self.router.handles_interactions()
-        {
-            self.router
-                .spawn_interaction(self.context.clone(), Arc::new(interaction.clone()));
+        match InteractionCreate::from_event_ref(&event) {
+            Some(InteractionCreate(interaction)) => {
+                self.router
+                    .route_interaction(&self.context, &event, interaction);
+            }
+            None => {
+                self.context.shared.collectors.dispatch(&event);
+            }
         }
 
         match self.event_order {

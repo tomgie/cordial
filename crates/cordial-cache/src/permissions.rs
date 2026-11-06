@@ -80,6 +80,10 @@ impl Cache {
     ///
     /// For a thread, the overwrites of the parent channel apply.
     ///
+    /// Limit: the cache does not keep thread members. In a private thread, a member that is
+    /// not in the thread and has no `MANAGE_THREADS` cannot see it, but this method gives the
+    /// `VIEW_CHANNEL` of the parent.
+    ///
     /// # Errors
     ///
     /// Gives an error when a needed object is not cached, or when the channel is obfuscated.

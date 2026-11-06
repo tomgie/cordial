@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use cordial_endpoint::{Handler, Reply};
+use cordial_model::gateway::event::{Event, InteractionCreate};
 use cordial_model::interaction::Interaction;
 
 use crate::context::Context;
@@ -37,9 +38,13 @@ impl<S: Send + Sync + 'static> EndpointHandler<S> {
 
 impl<S: Send + Sync + 'static> Handler for EndpointHandler<S> {
     async fn interaction(&self, interaction: Interaction) -> Reply {
+        // The same path as gateway interactions: collectors first, then the handlers.
+        let event = Arc::new(Event::InteractionCreate(Box::new(InteractionCreate(
+            interaction.clone(),
+        ))));
         let tracker = self
             .router
-            .spawn_interaction(self.context.clone(), Arc::new(interaction));
+            .route_interaction(&self.context, &event, &interaction);
 
         let mut acknowledged = tracker.subscribe();
         let wait = acknowledged.wait_for(|acknowledged| *acknowledged);

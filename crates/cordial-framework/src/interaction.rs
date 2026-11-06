@@ -38,6 +38,8 @@ pub enum ResponseState {
     },
     /// The bot deferred an update of the component message.
     DeferredUpdate,
+    /// The bot updated the component message. The original response is that message.
+    Updated,
     /// The bot sent the initial response.
     Responded,
 }
@@ -61,6 +63,10 @@ pub enum ResponseError {
     /// has one. A modal and autocomplete choices are examples.
     #[error("the interaction already has an initial response")]
     AlreadyAcknowledged,
+    /// The original response is not the component message, so an update cannot change it.
+    /// This happens after a reply or a message defer.
+    #[error("the original response is not the component message")]
+    NotComponentMessage,
 }
 
 /// The shared response state of one interaction.
@@ -306,14 +312,17 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
     ) -> Result<(), ResponseError> {
         let message = message.into();
         let mut state = self.tracker.state.lock().await;
-        if *state == ResponseState::Pending {
-            self.initial(InteractionResponse::update(message)).await?;
-            *state = ResponseState::Responded;
-            self.mark_acknowledged();
-            return Ok(());
+        match *state {
+            ResponseState::Pending => {
+                self.initial(InteractionResponse::update(message)).await?;
+                self.mark_acknowledged();
+            }
+            ResponseState::DeferredUpdate | ResponseState::Updated => {
+                self.edit_original(MessagePayload::from(message)).await?;
+            }
+            _ => return Err(ResponseError::NotComponentMessage),
         }
-        self.edit_original(MessagePayload::from(message)).await?;
-        *state = ResponseState::Responded;
+        *state = ResponseState::Updated;
         Ok(())
     }
 
@@ -389,7 +398,7 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
     /// # Errors
     ///
     /// Gives an error when the request fails.
-    pub async fn get_reply(&self) -> Result<Message, ResponseError> {
+    pub async fn original_response(&self) -> Result<Message, ResponseError> {
         Ok(self
             .http()
             .original_interaction_response(self.interaction.application_id, self.token())
@@ -450,11 +459,8 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
                 timeout,
             )
             .await?;
-        let context = InteractionContext::new(
-            self.context.clone(),
-            Arc::new(created.0),
-            ResponseTracker::new(),
-        );
+        let tracker = self.context.shared.take_tracker(created.id);
+        let context = InteractionContext::new(self.context.clone(), Arc::new(created.0), tracker);
         Some(crate::component::ComponentContext::new(
             context,
             crate::component::Params::default(),
@@ -490,13 +496,32 @@ impl<S: Send + Sync + 'static> InteractionContext<S> {
                 self.initial(InteractionResponse::message(message)).await?;
                 self.mark_acknowledged();
             }
-            ResponseState::Deferred { .. } => {
-                // The defer already set the ephemeral flag. Discord ignores it on the edit.
-                let mut payload = MessagePayload::from(message);
-                payload.flags = payload.flags.map(|flags| flags - MessageFlags::EPHEMERAL);
-                self.edit_original(payload).await?;
+            ResponseState::Deferred { ephemeral } => {
+                let wants_ephemeral = message
+                    .flags
+                    .is_some_and(|flags| flags.contains(MessageFlags::EPHEMERAL));
+                if wants_ephemeral == ephemeral {
+                    // The defer already set the ephemeral flag. An edit cannot change it.
+                    let mut payload = MessagePayload::from(message);
+                    payload.flags = payload.flags.map(|flags| flags - MessageFlags::EPHEMERAL);
+                    self.edit_original(payload).await?;
+                } else {
+                    // The defer has the other visibility, for example an automatic public
+                    // defer before an ephemeral reply. Replace the loading message, so that
+                    // private text never becomes public.
+                    self.http()
+                        .delete_original_interaction_response(
+                            self.interaction.application_id,
+                            self.token(),
+                        )
+                        .await?;
+                    self.http()
+                        .create_followup(self.interaction.application_id, self.token())
+                        .payload(MessagePayload::from(message))
+                        .await?;
+                }
             }
-            ResponseState::DeferredUpdate | ResponseState::Responded => {
+            ResponseState::DeferredUpdate | ResponseState::Updated | ResponseState::Responded => {
                 self.http()
                     .create_followup(self.interaction.application_id, self.token())
                     .payload(MessagePayload::from(message))
@@ -584,10 +609,12 @@ pub(crate) async fn watch_response<S: Send + Sync + 'static>(
     let interaction = context.interaction();
     match policy {
         SlowResponse::Defer(_) => {
-            let result = if interaction.command_data().is_some() {
-                context.defer().await
-            } else {
+            // An update defer needs a component message. A modal that a slash command opened
+            // has none.
+            let result = if interaction.command_data().is_none() && interaction.message.is_some() {
                 context.defer_update().await
+            } else {
+                context.defer().await
             };
             if let Err(error) = result {
                 tracing::warn!(interaction_id = %interaction.id, %error, "the automatic defer failed");

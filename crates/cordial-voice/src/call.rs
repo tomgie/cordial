@@ -331,6 +331,58 @@ impl Call {
         request.await
     }
 
+    /// In a stage channel: asks to speak. A stage moderator sees the request.
+    ///
+    /// # Errors
+    ///
+    /// Gives the error of the HTTP request.
+    pub async fn request_to_speak(
+        &self,
+        http: &cordial_http::Client,
+    ) -> Result<(), cordial_http::Error> {
+        http.edit_current_voice_state(self.guild_id())
+            .channel_id(self.channel_id())
+            .request_to_speak_timestamp(cordial_model::Timestamp::now())
+            .await
+            .map(drop)
+    }
+
+    /// In a stage channel: becomes a speaker (`false`) or an audience member (`true`).
+    ///
+    /// To become a speaker, the bot needs the `MUTE_MEMBERS` permission in the stage.
+    ///
+    /// # Errors
+    ///
+    /// Gives the error of the HTTP request.
+    pub async fn set_suppressed(
+        &self,
+        http: &cordial_http::Client,
+        suppressed: bool,
+    ) -> Result<(), cordial_http::Error> {
+        http.edit_current_voice_state(self.guild_id())
+            .channel_id(self.channel_id())
+            .suppress(suppressed)
+            .await
+            .map(drop)
+    }
+
+    /// Sets the status text of the voice channel, or removes it with `None`.
+    ///
+    /// # Errors
+    ///
+    /// Gives the error of the HTTP request.
+    pub async fn set_channel_status(
+        &self,
+        http: &cordial_http::Client,
+        status: Option<&str>,
+    ) -> Result<(), cordial_http::Error> {
+        let mut request = http.set_voice_channel_status(self.channel_id());
+        if let Some(status) = status {
+            request = request.status(status);
+        }
+        request.await.map(drop)
+    }
+
     /// Stops the call and closes the voice connection. It does not change the voice state
     /// in the main gateway; use [`VoiceManager::leave`](crate::VoiceManager::leave) for that.
     pub fn disconnect(&self) {

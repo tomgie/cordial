@@ -22,6 +22,10 @@ use crate::receive::Receiver;
 
 const SPEAKING_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// The number of idle frames between two UDP keepalive packets: 5 seconds. Without
+/// packets, a NAT router can drop the mapping, and a bot that only receives gets no audio.
+const KEEPALIVE_FRAMES: u32 = 250;
+
 /// The send task: each 20 ms it takes a frame from the mixer and sends one RTP packet.
 pub(crate) struct SendTask {
     pub(crate) socket: Arc<UdpSocket>,
@@ -44,6 +48,8 @@ struct SendState {
     #[cfg(feature = "opus")]
     encoder: Option<OpusEncoder>,
     warned: bool,
+    idle_frames: u32,
+    keepalive_counter: u32,
 }
 
 impl SendTask {
@@ -59,6 +65,8 @@ impl SendTask {
             #[cfg(feature = "opus")]
             encoder: None,
             warned: false,
+            idle_frames: 0,
+            keepalive_counter: 0,
         };
 
         // Burst sends the missed frames after a delay, so the clock does not drift.
@@ -88,9 +96,11 @@ impl SendTask {
             MixOutput::Busy => return,
             MixOutput::Idle => {
                 self.send_silence(state).await;
+                self.keep_alive(state).await;
                 return;
             }
         };
+        state.idle_frames = 0;
 
         if !state.speaking {
             self.set_speaking(self.flags).await;
@@ -119,6 +129,29 @@ impl SendTask {
         if state.silence_left == 0 {
             self.set_speaking(SpeakingFlags::NONE).await;
             state.speaking = false;
+        }
+    }
+
+    /// Sends a keepalive packet after 5 seconds without packets.
+    ///
+    /// The packet is 8 bytes with a little-endian counter, as other clients send. The voice
+    /// server does not answer it.
+    async fn keep_alive(&mut self, state: &mut SendState) {
+        if state.speaking {
+            state.idle_frames = 0;
+            return;
+        }
+        state.idle_frames += 1;
+        if state.idle_frames < KEEPALIVE_FRAMES {
+            return;
+        }
+        state.idle_frames = 0;
+
+        let mut packet = [0_u8; 8];
+        packet[..4].copy_from_slice(&state.keepalive_counter.to_le_bytes());
+        state.keepalive_counter = state.keepalive_counter.wrapping_add(1);
+        if let Err(error) = self.socket.send(&packet).await {
+            tracing::debug!(%error, "cannot send a voice keepalive");
         }
     }
 

@@ -223,7 +223,7 @@ Transport:
 - [x] Sans-IO voice core: Hello, Identify, Ready, Select Protocol, Session Description, heartbeat v8 with `seq_ack`, Resume, buffered resume.
 - [x] Join and leave through the gateway (op 4, VOICE_STATE_UPDATE, VOICE_SERVER_UPDATE). Null endpoint handling. Channel moves.
 - [x] UDP: IP discovery, RTP header, keepalive filter, RTCP filter.
-- [ ] UDP keepalive send, so that a bot that only receives keeps its NAT mapping.
+- [x] UDP keepalive send, so that a bot that only receives keeps its NAT mapping.
 - [x] AEAD modes: `aead_aes256_gcm_rtpsize`, `aead_xchacha20_poly1305_rtpsize`. Test vectors.
 
 DAVE:
@@ -247,7 +247,7 @@ Audio:
 - [ ] Seek.
 - [x] Receive: SSRC-to-user map (ops 5, 11, 13), jitter buffer, loss concealment, PCM events.
 - [x] Soundboard helper.
-- [ ] Stage helpers (suppress, request to speak). Voice channel status.
+- [x] Stage helpers (suppress, request to speak). Voice channel status.
 
 Exit: a music example plays a file in a DAVE call for 1 hour with Discord clients that listen. A recorder example saves each speaker to a separate file.
 

@@ -2,9 +2,20 @@
 //!
 //! Each request type has setters and implements `IntoFuture`. Write `.await` to send it.
 
+pub mod audit_log;
+pub mod auto_moderation;
+pub mod ban;
 pub mod channel;
 pub mod gateway;
+pub mod guild;
+pub mod guild_settings;
+pub mod join_request;
+mod limits;
+pub mod member;
 pub mod message;
+pub mod role;
+pub mod scheduled_event;
+pub mod template;
 pub mod user;
 
 /// Implements `IntoFuture` for a request type with a `client` field.

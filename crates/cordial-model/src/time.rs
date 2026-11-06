@@ -248,6 +248,39 @@ pub mod unix_seconds {
     }
 }
 
+/// Serde functions for an optional time that Discord sends as Unix seconds (a JSON number).
+pub mod option_unix_seconds {
+    use super::{Deserialize, Deserializer, Serializer, Timestamp};
+
+    /// Serializes the time as Unix seconds, or `None` as null.
+    ///
+    /// # Errors
+    ///
+    /// Gives the error of the serializer.
+    #[allow(clippy::ref_option)]
+    pub fn serialize<S: Serializer>(
+        value: &Option<Timestamp>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(value) => serializer.serialize_i64(value.unix_seconds()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    /// Deserializes the time from Unix seconds or null.
+    ///
+    /// # Errors
+    ///
+    /// Gives the error of the deserializer.
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<Timestamp>, D::Error> {
+        Option::<i64>::deserialize(deserializer)
+            .map(|value| value.map(Timestamp::from_unix_seconds))
+    }
+}
+
 /// Serde functions for a time that Discord sends as Unix milliseconds (a JSON number).
 pub mod unix_millis {
     use super::{Deserialize, Deserializer, Serializer, Timestamp};

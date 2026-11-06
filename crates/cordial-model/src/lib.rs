@@ -13,19 +13,26 @@
 #[macro_use]
 mod macros;
 
+pub mod application;
+pub mod channel;
 pub mod color;
 pub mod emoji;
 pub mod guild;
 pub mod id;
 pub mod image;
+pub mod invite;
 pub mod locale;
+pub mod monetization;
 pub mod nullable;
 pub mod oauth2;
 pub mod permissions;
+pub mod scheduled_event;
 pub mod serde_util;
 pub mod sticker;
 pub mod time;
 pub mod user;
+pub mod voice;
+pub mod webhook;
 
 pub use color::Color;
 pub use id::Id;

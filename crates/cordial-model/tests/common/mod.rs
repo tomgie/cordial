@@ -24,8 +24,36 @@ pub fn read_fixture(path: &str) -> Value {
 
 /// Decodes a fixture into `T`, encodes it again, and checks that no data is lost.
 pub fn assert_round_trip<T: DeserializeOwned + Serialize>(path: &str) -> T {
-    let input = read_fixture(path);
+    assert_round_trip_ignoring(path, &[])
+}
+
+/// Like [`assert_round_trip`], but ignores the keys in `ignored` at all levels.
+///
+/// Use it for undocumented fields in the docs examples. The docs say they are not supported.
+pub fn assert_round_trip_ignoring<T: DeserializeOwned + Serialize>(
+    path: &str,
+    ignored: &[&str],
+) -> T {
+    let mut input = read_fixture(path);
+    remove_keys(&mut input, ignored);
     assert_value_round_trip::<T>(path, &input)
+}
+
+fn remove_keys(value: &mut Value, keys: &[&str]) {
+    match value {
+        Value::Object(map) => {
+            map.retain(|key, _| !keys.contains(&key.as_str()));
+            for child in map.values_mut() {
+                remove_keys(child, keys);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                remove_keys(item, keys);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Decodes a JSON value into `T`, encodes it again, and checks that no data is lost.
@@ -104,7 +132,8 @@ fn is_empty_value(value: &Value) -> bool {
     match value {
         Value::Null | Value::Bool(false) => true,
         Value::Number(number) => number.as_f64() == Some(0.0),
-        Value::String(text) => text.is_empty(),
+        // Discord sends empty permission sets as the string "0".
+        Value::String(text) => text.is_empty() || text == "0",
         Value::Array(items) => items.is_empty(),
         Value::Object(map) => map.is_empty(),
         Value::Bool(true) => false,

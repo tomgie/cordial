@@ -15,10 +15,8 @@
 
 use std::collections::BTreeMap;
 
-use hmac::{Hmac, KeyInit, Mac};
-use sha2::Sha256;
-
 use super::cryptor::KEY_SIZE;
+use super::provider::hkdf_expand_sha256;
 
 /// The output size of SHA-256, the MLS secret size of ciphersuite 2.
 const SECRET_LENGTH: u16 = 32;
@@ -26,29 +24,10 @@ const SECRET_LENGTH: u16 = 32;
 /// The AES-128 key size as an `ExpandWithLabel` length.
 const KEY_LENGTH: u16 = 16;
 
-/// Computes HKDF-Expand (RFC 5869) with HMAC-SHA-256.
-///
-/// The `hkdf` crate refuses a pseudorandom key shorter than the hash output. The DAVE base
-/// secret has 16 bytes, so this function uses HMAC directly. HMAC accepts a key of any size.
+/// Computes HKDF-Expand with SHA-256. The output length is at most 255 hash blocks here, so
+/// the function does not fail.
 fn hkdf_expand(secret: &[u8], info: &[u8], length: usize) -> Vec<u8> {
-    let mut output = Vec::with_capacity(length);
-    let mut previous: Vec<u8> = Vec::new();
-    let mut counter: u8 = 1;
-    while output.len() < length {
-        let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(secret) else {
-            // HMAC accepts all key sizes, so this does not occur.
-            return output;
-        };
-        mac.update(&previous);
-        mac.update(info);
-        mac.update(&[counter]);
-        previous = mac.finalize().into_bytes().to_vec();
-
-        let needed = (length - output.len()).min(previous.len());
-        output.extend_from_slice(&previous[..needed]);
-        counter = counter.wrapping_add(1);
-    }
-    output
+    hkdf_expand_sha256(secret, info, length).unwrap_or_default()
 }
 
 /// Appends an MLS variable-length vector (RFC 9420, section 2.1.2) to `out`.

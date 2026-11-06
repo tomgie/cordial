@@ -25,7 +25,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
@@ -35,14 +35,14 @@ authors = ["cordial contributors"]
 
 # Internal crates. Keep each version equal to `workspace.package.version`.
 [workspace.dependencies]
-cordial-model = { path = "crates/cordial-model", version = "=0.5.0" }
-cordial-http = { path = "crates/cordial-http", version = "=0.5.0" }
-cordial-gateway = { path = "crates/cordial-gateway", version = "=0.5.0" }
-cordial-cache = { path = "crates/cordial-cache", version = "=0.5.0" }
-cordial-endpoint = { path = "crates/cordial-endpoint", version = "=0.5.0" }
-cordial-voice = { path = "crates/cordial-voice", version = "=0.5.0" }
-cordial-macros = { path = "crates/cordial-macros", version = "=0.5.0" }
-cordial-framework = { path = "crates/cordial-framework", version = "=0.5.0" }
+cordial-model = { path = "crates/cordial-model", version = "=0.5.1" }
+cordial-http = { path = "crates/cordial-http", version = "=0.5.1" }
+cordial-gateway = { path = "crates/cordial-gateway", version = "=0.5.1" }
+cordial-cache = { path = "crates/cordial-cache", version = "=0.5.1" }
+cordial-endpoint = { path = "crates/cordial-endpoint", version = "=0.5.1" }
+cordial-voice = { path = "crates/cordial-voice", version = "=0.5.1" }
+cordial-macros = { path = "crates/cordial-macros", version = "=0.5.1" }
+cordial-framework = { path = "crates/cordial-framework", version = "=0.5.1" }
 
 # External crates.
 serde = { version = "1", features = ["derive"] }
@@ -64,8 +64,11 @@ tokio-tungstenite = { version = "0.30", default-features = false, features = ["c
 zstd = { version = "0.14", default-features = false }
 # DAVE end-to-end encryption.
 openmls = "0.9.2"
-openmls_rust_crypto = "0.6"
-openmls_basic_credential = "0.6"
+openmls_traits = "0.6"
+openmls_memory_storage = "0.6"
+hpke = { version = "0.15", default-features = false, features = ["alloc", "getrandom", "nistp", "aes"] }
+p256 = { version = "0.14", default-features = false, features = ["ecdsa", "alloc"] }
+getrandom = "0.4"
 aes-gcm = "0.10"
 hmac = "0.13"
 sha2 = "0.11"

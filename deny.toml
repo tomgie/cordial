@@ -22,6 +22,23 @@ allow = [
     "Zlib",
     "CDLA-Permissive-2.0",
 ]
+# The optional `symphonia` feature of cordial-voice (file decoders). MPL-2.0 is file-level
+# copyleft: using the unchanged crates does not change the license of cordial. Do not allow
+# MPL-2.0 for other crates without a review.
+exceptions = [
+    { crate = "symphonia", allow = ["MPL-2.0"] },
+    { crate = "symphonia-bundle-flac", allow = ["MPL-2.0"] },
+    { crate = "symphonia-bundle-mp3", allow = ["MPL-2.0"] },
+    { crate = "symphonia-codec-aac", allow = ["MPL-2.0"] },
+    { crate = "symphonia-codec-pcm", allow = ["MPL-2.0"] },
+    { crate = "symphonia-codec-vorbis", allow = ["MPL-2.0"] },
+    { crate = "symphonia-core", allow = ["MPL-2.0"] },
+    { crate = "symphonia-format-isomp4", allow = ["MPL-2.0"] },
+    { crate = "symphonia-format-ogg", allow = ["MPL-2.0"] },
+    { crate = "symphonia-format-riff", allow = ["MPL-2.0"] },
+    { crate = "symphonia-metadata", allow = ["MPL-2.0"] },
+    { crate = "symphonia-utils-xiph", allow = ["MPL-2.0"] },
+]
 
 [bans]
 multiple-versions = "warn"

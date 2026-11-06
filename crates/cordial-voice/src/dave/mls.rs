@@ -16,13 +16,9 @@ use std::fmt;
 use openmls::ciphersuite::hash_ref::ProposalRef;
 use openmls::prelude::tls_codec::{Deserialize as _, Serialize as _};
 use openmls::prelude::*;
-use openmls_basic_credential::SignatureKeyPair;
-use openmls_rust_crypto::OpenMlsRustCrypto;
 
+use super::provider::{CIPHERSUITE, DaveProvider, SignatureKeyPair};
 use super::ratchet::KeyRatchet;
-
-/// The MLS ciphersuite of DAVE protocol version 1 (libdave `mls/parameters.cpp`).
-const CIPHERSUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMP256_AES128GCM_SHA256_P256;
 
 /// The exporter label of the sender base secret (libdave `mls/session.h`,
 /// `USER_MEDIA_KEY_BASE_LABEL`).
@@ -119,7 +115,7 @@ fn check_unique_members(members: impl Iterator<Item = Member>) -> Result<(), Mls
 
 /// An MLS group and its provider.
 struct Group {
-    provider: OpenMlsRustCrypto,
+    provider: DaveProvider,
     group: MlsGroup,
 }
 
@@ -130,7 +126,7 @@ pub(crate) struct MlsSession {
     signer: SignatureKeyPair,
     external_sender: Option<ExternalSender>,
     /// The provider that holds the current key package.
-    join: Option<OpenMlsRustCrypto>,
+    join: Option<DaveProvider>,
     pending: Option<Group>,
     established: Option<Group>,
     /// Whether an opcode 27 arrived for the current epoch (libdave `stateWithProposals_`).
@@ -160,7 +156,7 @@ impl fmt::Debug for MlsSession {
 impl MlsSession {
     /// Makes an MLS session with a new signature key pair.
     pub(crate) fn new() -> Result<Self, MlsError> {
-        let signer = SignatureKeyPair::new(CIPHERSUITE.signature_algorithm())
+        let signer = SignatureKeyPair::generate()
             .map_err(|cause| fail("cannot make the signature key pair", format!("{cause:?}")))?;
         Ok(Self {
             own_user_id: 0,
@@ -244,7 +240,7 @@ impl MlsSession {
         let extensions = Extensions::single(Extension::ExternalSenders(vec![sender]))
             .map_err(|cause| fail("cannot make the group extensions", cause))?;
 
-        let provider = OpenMlsRustCrypto::default();
+        let provider = DaveProvider::default();
         let group = MlsGroup::builder()
             .with_group_id(GroupId::from_slice(&self.group_id))
             .ciphersuite(CIPHERSUITE)
@@ -266,7 +262,7 @@ impl MlsSession {
     /// libdave sends the bare `KeyPackage` structure (`tls::marshal(*joinKeyPackage_)`), not an
     /// `MLSMessage`. This function does the same.
     pub(crate) fn key_package(&mut self) -> Result<Vec<u8>, MlsError> {
-        let provider = OpenMlsRustCrypto::default();
+        let provider = DaveProvider::default();
         let bundle = KeyPackage::builder()
             .key_package_lifetime(lifetime())
             .leaf_node_capabilities(capabilities())
@@ -572,7 +568,7 @@ fn check_handshake(
 
 /// Checks and stores one proposal of opcode 27 (libdave `Session::ValidateProposalMessage`).
 fn append_proposal(
-    provider: &OpenMlsRustCrypto,
+    provider: &DaveProvider,
     group: &mut MlsGroup,
     message: MlsMessageIn,
     recognized: &HashSet<u64>,

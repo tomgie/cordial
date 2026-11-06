@@ -2,10 +2,9 @@
 
 use openmls::prelude::tls_codec::{Deserialize as _, Serialize as _, Size as _};
 use openmls::prelude::*;
-use openmls_basic_credential::SignatureKeyPair;
-use openmls_rust_crypto::OpenMlsRustCrypto;
 use serde_json::json;
 
+use super::provider::{DaveProvider, SignatureKeyPair};
 use super::*;
 
 const CHANNEL: ChannelId = ChannelId::new_const(1_234_567_890_123);
@@ -20,7 +19,7 @@ const OPUS_FRAME: &[u8] = &[
 
 /// The voice gateway: the MLS delivery service and external sender.
 struct Gateway {
-    provider: OpenMlsRustCrypto,
+    provider: DaveProvider,
     signer: SignatureKeyPair,
     group_id: GroupId,
     epoch: u64,
@@ -29,8 +28,8 @@ struct Gateway {
 impl Gateway {
     fn new() -> Self {
         Self {
-            provider: OpenMlsRustCrypto::default(),
-            signer: SignatureKeyPair::new(SignatureScheme::ECDSA_SECP256R1_SHA256).unwrap(),
+            provider: DaveProvider::default(),
+            signer: SignatureKeyPair::generate().unwrap(),
             group_id: GroupId::from_slice(&CHANNEL.get().to_be_bytes()),
             epoch: 0,
         }
@@ -53,7 +52,7 @@ impl Gateway {
                     .unwrap()
                     .validate(self.provider.crypto(), ProtocolVersion::Mls10)
                     .unwrap();
-                ExternalProposal::new_add::<OpenMlsRustCrypto>(
+                ExternalProposal::new_add::<DaveProvider>(
                     key_package,
                     self.group_id.clone(),
                     GroupEpoch::from(self.epoch),
@@ -68,7 +67,7 @@ impl Gateway {
 
     /// The payload of opcode 27 with a Remove proposal.
     fn propose_remove(&self, leaf_index: LeafNodeIndex) -> Vec<u8> {
-        let message = ExternalProposal::new_remove::<OpenMlsRustCrypto>(
+        let message = ExternalProposal::new_remove::<DaveProvider>(
             leaf_index,
             self.group_id.clone(),
             GroupEpoch::from(self.epoch),
@@ -549,6 +548,47 @@ fn key_package_has_required_parameters() {
     );
     assert!(capabilities.extensions().is_empty());
     assert!(leaf.extensions().iter().next().is_none());
+}
+
+/// Checks the key package signature with `p256` directly, without OpenMLS: the signature is
+/// `SignWithLabel(key, "KeyPackageTBS", tbs)` of RFC 9420, section 5.1.2.
+#[test]
+fn key_package_signature_verifies_independently() {
+    use p256::ecdsa::signature::Verifier as _;
+    use p256::ecdsa::{Signature, VerifyingKey};
+
+    let gateway = Gateway::new();
+    let (_alice, bytes) = join(&gateway, ALICE, &[]);
+    let key_package = KeyPackageIn::tls_deserialize_exact(bytes.as_slice())
+        .unwrap()
+        .validate(gateway.provider.crypto(), ProtocolVersion::Mls10)
+        .unwrap();
+    let public_key = key_package.leaf_node().signature_key().as_slice().to_vec();
+    assert_eq!(public_key.len(), 65);
+
+    // The signature is the last field: a 2-byte vector length, then a DER sequence.
+    let (tbs, signature) = (60..=72)
+        .find_map(|size: usize| {
+            let start = bytes.len().checked_sub(size + 2)?;
+            let length = u16::from_be_bytes([bytes[start], bytes[start + 1]]);
+            let is_field = length == 0x4000 | u16::try_from(size).ok()?
+                && bytes[start + 2] == 0x30
+                && usize::from(bytes[start + 3]) == size - 2;
+            is_field.then(|| (&bytes[..start], &bytes[start + 2..]))
+        })
+        .expect("a DER signature at the end");
+
+    let label = b"MLS 1.0 KeyPackageTBS";
+    let mut content = vec![u8::try_from(label.len()).unwrap()];
+    content.extend_from_slice(label);
+    let tbs_length = u16::try_from(tbs.len()).unwrap();
+    assert!(tbs_length < 0x4000);
+    content.extend_from_slice(&(0x4000 | tbs_length).to_be_bytes());
+    content.extend_from_slice(tbs);
+
+    let key = VerifyingKey::from_sec1_bytes(&public_key).unwrap();
+    key.verify(&content, &Signature::from_der(signature).unwrap())
+        .unwrap();
 }
 
 #[test]

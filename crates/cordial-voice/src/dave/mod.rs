@@ -15,6 +15,7 @@
 //! | `encryptor` | The send side | `encryptor.cpp` |
 //! | `decryptor` | The receive side, replay checks, expiry | `decryptor.cpp`, `cryptor_manager.cpp` |
 //! | `mls` | The MLS group on OpenMLS | `mls/session.cpp`, `mls/parameters.cpp` |
+//! | `provider` | The OpenMLS provider for ciphersuite 2 | `mls/parameters.cpp` |
 //!
 //! The flow of the voice gateway opcodes follows the libdave sample `DaveSessionManager.ts`.
 
@@ -23,6 +24,7 @@ mod decryptor;
 mod encryptor;
 mod frame;
 mod mls;
+mod provider;
 mod ratchet;
 
 #[cfg(test)]

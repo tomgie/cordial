@@ -71,6 +71,13 @@ hmac = "0.13"
 sha2 = "0.11"
 subtle = "2.6"
 
+# Derive macros.
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+proc-macro-crate = "3"
+trybuild = "1"
+
 [workspace.lints.rust]
 missing_docs = "deny"
 unsafe_code = "forbid"

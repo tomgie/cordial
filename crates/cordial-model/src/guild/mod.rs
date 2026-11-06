@@ -574,6 +574,46 @@ pub struct WelcomeScreenChannel {
     pub emoji_name: Option<String>,
 }
 
+impl WelcomeScreen {
+    /// Makes a welcome screen.
+    #[must_use]
+    pub fn new(description: Option<String>, welcome_channels: Vec<WelcomeScreenChannel>) -> Self {
+        Self {
+            description,
+            welcome_channels,
+        }
+    }
+}
+
+impl WelcomeScreenChannel {
+    /// Makes a welcome screen channel without an emoji.
+    #[must_use]
+    pub fn new(channel_id: ChannelId, description: impl Into<String>) -> Self {
+        Self {
+            channel_id,
+            description: description.into(),
+            emoji_id: None,
+            emoji_name: None,
+        }
+    }
+
+    /// Sets a custom emoji.
+    #[must_use]
+    pub fn custom_emoji(mut self, emoji_id: EmojiId) -> Self {
+        self.emoji_id = Some(emoji_id);
+        self.emoji_name = None;
+        self
+    }
+
+    /// Sets a Unicode emoji.
+    #[must_use]
+    pub fn unicode_emoji(mut self, emoji: impl Into<String>) -> Self {
+        self.emoji_id = None;
+        self.emoji_name = Some(emoji.into());
+        self
+    }
+}
+
 /// The onboarding flow of a guild.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -648,6 +688,110 @@ pub struct OnboardingPromptOption {
     /// The description.
     #[serde(default)]
     pub description: Option<String>,
+}
+
+impl OnboardingPrompt {
+    /// Makes a prompt. For a new prompt, give any unique snowflake as the ID.
+    #[must_use]
+    pub fn new(
+        id: OnboardingPromptId,
+        kind: OnboardingPromptType,
+        title: impl Into<String>,
+        options: Vec<OnboardingPromptOption>,
+    ) -> Self {
+        Self {
+            id,
+            kind,
+            options,
+            title: title.into(),
+            single_select: false,
+            required: false,
+            in_onboarding: true,
+        }
+    }
+
+    /// Sets whether users can select only one option.
+    #[must_use]
+    pub fn single_select(mut self, single_select: bool) -> Self {
+        self.single_select = single_select;
+        self
+    }
+
+    /// Sets whether the prompt is required.
+    #[must_use]
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    /// Sets whether the prompt is in the onboarding flow.
+    #[must_use]
+    pub fn in_onboarding(mut self, in_onboarding: bool) -> Self {
+        self.in_onboarding = in_onboarding;
+        self
+    }
+}
+
+impl OnboardingPromptOption {
+    /// Makes an option. For a new option, give any unique snowflake as the ID.
+    #[must_use]
+    pub fn new(id: OnboardingPromptId, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            channel_ids: Vec::new(),
+            role_ids: Vec::new(),
+            emoji: None,
+            emoji_id: None,
+            emoji_name: None,
+            emoji_animated: None,
+            title: title.into(),
+            description: None,
+        }
+    }
+
+    /// Sets the channels that a member joins with this option.
+    #[must_use]
+    pub fn channels(mut self, channel_ids: Vec<ChannelId>) -> Self {
+        self.channel_ids = channel_ids;
+        self
+    }
+
+    /// Sets the roles that a member gets with this option.
+    #[must_use]
+    pub fn roles(mut self, role_ids: Vec<RoleId>) -> Self {
+        self.role_ids = role_ids;
+        self
+    }
+
+    /// Sets the description.
+    #[must_use]
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Sets a custom emoji (requests use these fields, not `emoji`).
+    #[must_use]
+    pub fn custom_emoji(
+        mut self,
+        emoji_id: EmojiId,
+        name: impl Into<String>,
+        animated: bool,
+    ) -> Self {
+        self.emoji_id = Some(emoji_id);
+        self.emoji_name = Some(name.into());
+        self.emoji_animated = Some(animated);
+        self
+    }
+
+    /// Sets a Unicode emoji.
+    #[must_use]
+    pub fn unicode_emoji(mut self, emoji: impl Into<String>) -> Self {
+        self.emoji_id = None;
+        self.emoji_name = Some(emoji.into());
+        self.emoji_animated = None;
+        self
+    }
 }
 
 crate::discord_enum! {

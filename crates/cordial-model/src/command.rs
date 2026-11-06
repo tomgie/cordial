@@ -2,12 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::Permissions;
 use crate::application::ApplicationIntegrationType;
 use crate::channel::ChannelType;
 use crate::id::{ApplicationId, CommandId, CommandVersionId, GenericId, GuildId};
 use crate::interaction::InteractionContextType;
 use crate::locale::Localizations;
+use crate::{Patch, Permissions};
 
 /// The maximum number of options of a command or a subcommand.
 pub const OPTION_COUNT_LIMIT: usize = 25;
@@ -127,9 +127,10 @@ pub struct CommandDefinition {
     /// The options, up to 25. Only for chat input commands.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<CommandOption>,
-    /// The permissions that a member needs by default. `Some(empty)` means administrators only.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default_member_permissions: Option<Permissions>,
+    /// The permissions that a member needs by default. `Set(empty)` means administrators only.
+    /// `Clear` (null) means that everyone can use the command.
+    #[serde(default, skip_serializing_if = "Patch::is_keep")]
+    pub default_member_permissions: Patch<Permissions>,
     /// Tells if the command is age-restricted.
     #[serde(default, skip_serializing_if = "crate::serde_util::is_false")]
     pub nsfw: bool,
@@ -172,7 +173,7 @@ impl CommandDefinition {
             description,
             description_localizations: None,
             options: Vec::new(),
-            default_member_permissions: None,
+            default_member_permissions: Patch::Keep,
             nsfw: false,
             integration_types: None,
             contexts: None,
@@ -187,10 +188,19 @@ impl CommandDefinition {
         self
     }
 
-    /// Sets the permissions that a member needs by default.
+    /// Sets the permissions that a member needs by default. Empty permissions mean
+    /// administrators only.
     #[must_use]
     pub fn default_member_permissions(mut self, permissions: Permissions) -> Self {
-        self.default_member_permissions = Some(permissions);
+        self.default_member_permissions = Patch::Set(permissions);
+        self
+    }
+
+    /// Lets everyone use the command by default (sends null). Use it in an edit to remove a
+    /// permission requirement.
+    #[must_use]
+    pub fn everyone_can_use(mut self) -> Self {
+        self.default_member_permissions = Patch::Clear;
         self
     }
 
@@ -249,7 +259,7 @@ impl From<&Command> for CommandDefinition {
             description: command.description.clone(),
             description_localizations: command.description_localizations.clone(),
             options: command.options.clone(),
-            default_member_permissions: command.default_member_permissions,
+            default_member_permissions: command.default_member_permissions.into(),
             nsfw: command.nsfw,
             integration_types: command.integration_types.clone(),
             contexts: command.contexts.clone(),

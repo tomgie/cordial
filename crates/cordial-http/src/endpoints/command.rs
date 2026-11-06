@@ -4,7 +4,6 @@
 //! disabled it with command permissions v2. Use [`Client::edit_command_permissions`] for
 //! each command.
 
-use cordial_model::Permissions;
 use cordial_model::application::ApplicationIntegrationType;
 use cordial_model::command::{
     Command, CommandDefinition, CommandOption, CommandPermission, CommandType, EntryPointHandler,
@@ -14,6 +13,7 @@ use cordial_model::id::{ApplicationId, CommandId, GuildId};
 use cordial_model::interaction::InteractionContextType;
 use cordial_model::locale::Localizations;
 use cordial_model::validate::{self, ValidationError};
+use cordial_model::{Patch, Permissions};
 use serde::Serialize;
 
 use crate::client::Client;
@@ -38,8 +38,8 @@ struct CommandBody<'a> {
     description_localizations: Option<&'a Localizations>,
     #[serde(skip_serializing_if = "<[_]>::is_empty")]
     options: &'a [CommandOption],
-    #[serde(skip_serializing_if = "Option::is_none")]
-    default_member_permissions: Option<Permissions>,
+    #[serde(skip_serializing_if = "Patch::is_keep")]
+    default_member_permissions: Patch<Permissions>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     nsfw: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

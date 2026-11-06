@@ -166,6 +166,56 @@ fn one() -> u32 {
     1
 }
 
+impl RecurrenceRule {
+    /// Makes a rule that starts at `start` and repeats at `frequency`, with interval 1.
+    ///
+    /// Discord limits the combinations: see the setters.
+    #[must_use]
+    pub fn new(start: Timestamp, frequency: RecurrenceFrequency) -> Self {
+        Self {
+            start,
+            end: None,
+            frequency,
+            interval: 1,
+            by_weekday: None,
+            by_n_weekday: None,
+            by_month: None,
+            by_month_day: None,
+            by_year_day: None,
+            count: None,
+        }
+    }
+
+    /// Sets the interval. Only weekly events can use 2 ("every other week").
+    #[must_use]
+    pub fn interval(mut self, interval: u32) -> Self {
+        self.interval = interval;
+        self
+    }
+
+    /// Sets the days of the week. Daily events need a fixed set; weekly events need one day.
+    #[must_use]
+    pub fn by_weekday(mut self, days: Vec<Weekday>) -> Self {
+        self.by_weekday = Some(days);
+        self
+    }
+
+    /// Sets one day in one week of the month. Only for monthly events.
+    #[must_use]
+    pub fn by_n_weekday(mut self, day: NWeekday) -> Self {
+        self.by_n_weekday = Some(vec![day]);
+        self
+    }
+
+    /// Sets the date of a yearly event.
+    #[must_use]
+    pub fn by_date(mut self, month: Month, day: u8) -> Self {
+        self.by_month = Some(vec![month]);
+        self.by_month_day = Some(vec![day]);
+        self
+    }
+}
+
 crate::discord_enum! {
     /// How often a scheduled event occurs.
     pub enum RecurrenceFrequency: u8 {

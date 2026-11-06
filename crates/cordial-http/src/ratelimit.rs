@@ -219,6 +219,17 @@ impl RateLimiter for InMemoryRateLimiter {
     }
 }
 
+/// The longest wait of the limiter: about 30 years.
+const MAX_WAIT: Duration = Duration::from_secs(30 * 365 * 24 * 60 * 60);
+
+/// Gives the time `wait` after `now`.
+///
+/// A response can give any wait time, and `Instant + Duration` panics on overflow. Thus a
+/// longer wait becomes [`MAX_WAIT`].
+fn deadline(now: Instant, wait: Duration) -> Instant {
+    now + wait.min(MAX_WAIT)
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic while the lock is held leaves simple counters, which stay usable.
     mutex
@@ -292,7 +303,7 @@ impl State {
     }
 
     fn pause_global(&self, duration: Duration) {
-        let until = Instant::now() + duration;
+        let until = deadline(Instant::now(), duration);
         let mut pause = lock(&self.global_pause);
         if pause.is_none_or(|current| current < until) {
             *pause = Some(until);
@@ -442,7 +453,7 @@ impl Bucket {
         if let (Some(limit), Some(remaining), Some(reset_after)) =
             (headers.limit, headers.remaining, headers.reset_after)
         {
-            let new_reset = now + reset_after;
+            let new_reset = deadline(now, reset_after);
             // Responses can arrive out of order. Trust the headers fully only for a new window.
             let new_window = state
                 .reset_at
@@ -467,7 +478,7 @@ impl Bucket {
             state.limit.get_or_insert(1);
             state.unlimited = false;
             state.remaining = 0;
-            state.reset_at = Some(now + retry_after);
+            state.reset_at = Some(deadline(now, retry_after));
         }
     }
 }
@@ -662,5 +673,38 @@ mod tests {
 
         // 5 requests at 2 for each second need at least 2 full windows.
         assert!(start.elapsed() >= Duration::from_secs(2));
+    }
+
+    /// A very large wait time in a header made `Instant + Duration` overflow and panic.
+    #[tokio::test(start_paused = true)]
+    async fn very_large_wait_times_do_not_panic() {
+        let parsed = {
+            let mut map = http::HeaderMap::new();
+            map.insert("x-ratelimit-limit", "1".parse().unwrap());
+            map.insert("x-ratelimit-remaining", "0".parse().unwrap());
+            map.insert(
+                "x-ratelimit-reset-after",
+                "18446744073709550000".parse().unwrap(),
+            );
+            map.insert("retry-after", "18446744073709550000".parse().unwrap());
+            RateLimitHeaders::parse(&map)
+        };
+        assert!(parsed.reset_after.is_some());
+        let global = RateLimitHeaders {
+            global: true,
+            ..parsed.clone()
+        };
+
+        // One route for each response, so that no acquire waits for an earlier bucket.
+        let limiter = InMemoryRateLimiter::new();
+        let responses = [(1, 200, &parsed), (2, 429, &parsed), (3, 429, &global)];
+        for (channel, status, headers) in responses {
+            limiter
+                .acquire(&route(channel))
+                .await
+                .complete(Outcome::Response { status, headers });
+        }
+
+        assert!(limiter.global_pause_remaining().is_some());
     }
 }

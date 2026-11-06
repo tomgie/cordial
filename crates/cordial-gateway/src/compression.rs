@@ -105,6 +105,36 @@ impl Decompressor {
     }
 }
 
+/// The decompression context of one connection, for fuzz targets and benchmarks.
+///
+/// It is not part of the public API and can change in any release.
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct Inflater(Decompressor);
+
+#[cfg(feature = "fuzzing")]
+impl Inflater {
+    /// Makes a context for a connection.
+    ///
+    /// # Errors
+    ///
+    /// Gives an error when the compression is not compiled in.
+    pub fn new(compression: Compression) -> Result<Self, DecompressError> {
+        Decompressor::new(compression).map(Self)
+    }
+
+    /// Takes one binary frame. Gives the text of a complete gateway message, or `None` when
+    /// more frames are necessary.
+    ///
+    /// # Errors
+    ///
+    /// Gives an error when the data is not valid.
+    pub fn push(&mut self, frame: &[u8]) -> Result<Option<String>, DecompressError> {
+        self.0.push(frame)
+    }
+}
+
 /// The `zlib-stream` context: one inflate stream for the whole connection.
 #[cfg(feature = "zlib")]
 pub(crate) struct ZlibStream {

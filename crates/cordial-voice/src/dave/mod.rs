@@ -23,6 +23,9 @@ mod cryptor;
 mod decryptor;
 mod encryptor;
 mod frame;
+#[cfg(feature = "fuzzing")]
+#[doc(hidden)]
+pub mod fuzzing;
 mod mls;
 mod provider;
 mod ratchet;

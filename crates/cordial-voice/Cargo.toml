@@ -16,6 +16,8 @@ default = []
 opus = ["dep:opus"]
 # Decode common audio formats (MP3, FLAC, WAV, Vorbis, AAC) with symphonia. Needs `opus`.
 symphonia = ["opus", "dep:symphonia"]
+# Internal: exposes the DAVE frame codec for fuzz targets. It is not part of the public API.
+fuzzing = []
 
 [dependencies]
 cordial-model.workspace = true

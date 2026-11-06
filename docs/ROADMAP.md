@@ -253,8 +253,8 @@ Exit: a music example plays a file in a DAVE call for 1 hour with Discord client
 
 ## P9: Hardening and release
 
-- [ ] Fuzz targets for all decoders (gateway, HTTP responses, voice packets, DAVE frames).
-- [ ] Benchmarks: event decode rate, cache memory, rate limiter overhead.
+- [x] Fuzz targets for all decoders (gateway, HTTP responses, voice packets, DAVE frames). See `fuzz/README.md`. A stable smoke test runs in CI.
+- [x] Benchmarks: event decode rate, cache memory, rate limiter overhead. See `docs/BENCHMARKS.md`.
 - [ ] Soak test: 1000+ guilds on a test application, or a recorded large-bot event log.
 - [ ] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.
 - [ ] Rustdoc for every public item, with an example on each main type.

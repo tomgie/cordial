@@ -29,9 +29,14 @@ tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "signal"
 tracing.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 cordial-http = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
 trybuild.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "command"
+harness = false

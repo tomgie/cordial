@@ -74,6 +74,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check -p cordial-model --target wasm32-unknown-unknown
 
+  fuzz-smoke:
+    name: Fuzz smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      # Runs each fuzz body over fixed pseudo-random inputs on stable. libFuzzer needs nightly.
+      - run: cargo test --manifest-path fuzz/Cargo.toml
+
   deny:
     name: Dependency policy
     runs-on: ubuntu-latest

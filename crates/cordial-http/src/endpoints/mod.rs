@@ -2,10 +2,15 @@
 //!
 //! Each request type has setters and implements `IntoFuture`. Write `.await` to send it.
 
+pub mod application;
 pub mod channel;
+pub mod command;
+pub mod emoji;
 pub mod gateway;
 pub mod message;
+pub mod sticker;
 pub mod user;
+pub mod voice;
 
 /// Implements `IntoFuture` for a request type with a `client` field.
 macro_rules! into_future {

@@ -102,23 +102,23 @@ Exit: a test bot sends a message with an attachment. Rate-limit tests pass for a
 
 ## P3: Gateway
 
-- [ ] Gateway payload types: opcodes 0..11, 31, 43. Identify (with `capabilities`), Resume, Presence, Voice State, Request Guild Members, Request Soundboard Sounds, Request Channel Info.
-- [ ] `Intents` (bits 0..25) and the event-to-intent table.
-- [ ] All dispatch event structs and the `Event` enum (see research/01-gateway.md section 7). Include RATE_LIMITED, CHANNEL_INFO, SOUNDBOARD_SOUNDS, VOICE_CHANNEL_STATUS_UPDATE, VOICE_CHANNEL_START_TIME_UPDATE.
-- [ ] `EventType` flags and two-step decode with an event filter.
-- [ ] Sans-IO `ShardCore`: Hello, Identify, heartbeat with jitter, ACK tracking, zombie detection, Resume, op 7, op 9, all close codes.
-- [ ] Close codes 4013 and 4014 give a fatal error that names the intents.
-- [ ] Shard driver with `tokio-tungstenite`.
-- [ ] `zlib-stream` decompression. `zstd-stream` behind a feature.
-- [ ] Send limiter (120 per 60 s, heartbeat reserve), 4096-byte check.
-- [ ] Op 8 limit (1 all-members request per guild per 30 s) and RATE_LIMITED handling.
-- [ ] Member chunk collector: `request_members(...)` gives a stream of chunks, matched by `nonce`.
-- [ ] `ShardManager`, `IdentifyQueue` trait, `LocalQueue`, session start limit guard.
-- [ ] Session export and import for resume after a process restart.
-- [ ] Channel obfuscation: handle the flag. Test with `capabilities: 1<<15`.
-- [ ] Mock gateway server for driver tests.
+- [x] Gateway payload types: opcodes 0..11, 31, 43. Identify (with `capabilities`), Resume, Presence, Voice State, Request Guild Members, Request Soundboard Sounds, Request Channel Info.
+- [x] `Intents` (bits 0..25) and the event-to-intent table.
+- [x] All dispatch event structs and the `Event` enum (see research/01-gateway.md section 7). Include RATE_LIMITED, CHANNEL_INFO, SOUNDBOARD_SOUNDS, VOICE_CHANNEL_STATUS_UPDATE, VOICE_CHANNEL_START_TIME_UPDATE.
+- [x] `EventType` flags and two-step decode with an event filter.
+- [x] Sans-IO `ShardCore`: Hello, Identify, heartbeat with jitter, ACK tracking, zombie detection, Resume, op 7, op 9, all close codes.
+- [x] Close codes 4013 and 4014 give a fatal error that names the intents.
+- [x] Shard driver with `tokio-tungstenite`.
+- [x] `zlib-stream` decompression. `zstd-stream` behind a feature.
+- [x] Send limiter (120 per 60 s, heartbeat reserve), 4096-byte check.
+- [x] Op 8 limit (1 all-members request per guild per 30 s) and RATE_LIMITED handling.
+- [x] Member chunk collector: `request_members(...)` gives a stream of chunks, matched by `nonce`.
+- [x] `ShardManager`, `IdentifyQueue` trait, `LocalQueue`, session start limit guard.
+- [x] Session export and import for resume after a process restart.
+- [x] Channel obfuscation: handle the flag. Test with `capabilities: 1<<15`.
+- [x] Mock gateway server for driver tests.
 
-Exit: a test bot with 4 shards runs for 24 hours on a test guild. It resumes after forced disconnects. No event is lost (sequence check).
+Exit (open: needs a bot token and a test guild): a test bot with 4 shards runs for 24 hours on a test guild. It resumes after forced disconnects. No event is lost (sequence check).
 
 ## P4: Interactions
 

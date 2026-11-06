@@ -36,6 +36,6 @@ pub use manager::{
 };
 pub use queue::{IdentifyQueue, LocalIdentifyQueue};
 pub use shard::{
-    CloseMode, DEFAULT_GATEWAY_URL, Shard, ShardConfig, ShardError, ShardEvent, ShardHandle,
-    ShardMessage,
+    CloseMode, DEFAULT_GATEWAY_URL, MemberChunks, Shard, ShardConfig, ShardError, ShardEvent,
+    ShardHandle, ShardMessage,
 };

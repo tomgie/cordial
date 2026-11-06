@@ -1,14 +1,18 @@
 //! The Tokio driver of one shard.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cordial_http::Token;
-use cordial_model::gateway::event::Event;
+use cordial_model::gateway::RequestGuildMembers;
+use cordial_model::gateway::event::{Event, GuildMembersChunk};
 use cordial_model::gateway::{
     Capabilities, EventTypes, IdentifyProperties, Intents, UpdatePresence,
 };
+use cordial_model::guild::Member;
+use cordial_model::id::UserId;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
@@ -231,7 +235,36 @@ pub enum ShardError {
 
 enum Request {
     Command(Command, oneshot::Sender<Result<(), CommandError>>),
+    Members(
+        RequestGuildMembers,
+        mpsc::Sender<GuildMembersChunk>,
+        oneshot::Sender<Result<(), CommandError>>,
+    ),
     Close(CloseMode, oneshot::Sender<Option<Session>>),
+}
+
+/// The replies (`GUILD_MEMBERS_CHUNK`) to one Request Guild Members command.
+#[derive(Debug)]
+pub struct MemberChunks {
+    receiver: mpsc::Receiver<GuildMembersChunk>,
+}
+
+impl MemberChunks {
+    /// Gives the next chunk. Gives `None` after the last chunk, or when the shard stopped.
+    pub async fn next(&mut self) -> Option<GuildMembersChunk> {
+        self.receiver.recv().await
+    }
+
+    /// Waits for all chunks and gives all members, and the IDs that were not found.
+    pub async fn collect(mut self) -> (Vec<Member>, Vec<UserId>) {
+        let mut members = Vec::new();
+        let mut not_found = Vec::new();
+        while let Some(chunk) = self.next().await {
+            members.extend(chunk.members);
+            not_found.extend(chunk.not_found);
+        }
+        (members, not_found)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -280,6 +313,29 @@ impl ShardHandle {
             .await
             .map_err(|_| ShardError::Stopped)?
             .map_err(ShardError::from)
+    }
+
+    /// Requests guild members and gives a stream of the replies to this request.
+    ///
+    /// The shard sets a unique nonce when the request has none. The chunks also arrive in
+    /// the normal event stream.
+    ///
+    /// # Errors
+    ///
+    /// Gives an error when the command is not valid now (for example an all-member request
+    /// for the same guild within 30 seconds) or the shard has stopped.
+    pub async fn request_members(
+        &self,
+        request: RequestGuildMembers,
+    ) -> Result<MemberChunks, ShardError> {
+        let (chunks, receiver) = mpsc::channel(16);
+        let (reply, answer) = oneshot::channel();
+        self.requests
+            .send(Request::Members(request, chunks, reply))
+            .await
+            .map_err(|_| ShardError::Stopped)?;
+        answer.await.map_err(|_| ShardError::Stopped)??;
+        Ok(MemberChunks { receiver })
     }
 
     /// Closes the shard. With [`CloseMode::Resumable`], gives the session to resume later.
@@ -369,6 +425,8 @@ struct Driver {
     requests: mpsc::Receiver<Request>,
     status: Arc<Mutex<Status>>,
     failures: u32,
+    member_collectors: HashMap<String, mpsc::Sender<GuildMembersChunk>>,
+    next_nonce: u64,
 }
 
 impl Driver {
@@ -390,6 +448,8 @@ impl Driver {
             requests,
             status,
             failures: 0,
+            member_collectors: HashMap::new(),
+            next_nonce: 0,
         }
     }
 
@@ -527,6 +587,19 @@ impl Driver {
                         let result = self.core.send_command(&command, std::time::Instant::now());
                         let _ = reply.send(result);
                     }
+                    Some(Request::Members(mut request, chunks, reply)) => {
+                        let nonce = request.nonce.clone().unwrap_or_else(|| {
+                            self.next_nonce += 1;
+                            format!("cordial-{}-{}", self.config.shard[0], self.next_nonce)
+                        });
+                        request.nonce = Some(nonce.clone());
+                        let command = Command::RequestGuildMembers(request);
+                        let result = self.core.send_command(&command, std::time::Instant::now());
+                        if result.is_ok() {
+                            self.member_collectors.insert(nonce, chunks);
+                        }
+                        let _ = reply.send(result);
+                    }
                     Some(Request::Close(mode, reply)) => {
                         let session = self.close(&mut socket, mode).await;
                         let _ = reply.send(session);
@@ -611,6 +684,10 @@ impl Driver {
     }
 
     async fn dispatch(&mut self, name: &str, data: &serde_json::value::RawValue) -> bool {
+        if name == "GUILD_MEMBERS_CHUNK" && !self.member_collectors.is_empty() {
+            self.collect_members(data).await;
+        }
+
         let always = matches!(name, "READY" | "RESUMED" | "RATE_LIMITED");
         let wanted = always
             || cordial_model::gateway::EventType::from_name(name)
@@ -629,6 +706,24 @@ impl Driver {
                 })
                 .await
             }
+        }
+    }
+
+    async fn collect_members(&mut self, data: &serde_json::value::RawValue) {
+        let Ok(chunk) = serde_json::from_str::<GuildMembersChunk>(data.get()) else {
+            return;
+        };
+        let Some(nonce) = chunk.nonce.clone() else {
+            return;
+        };
+        let Some(collector) = self.member_collectors.get(&nonce) else {
+            return;
+        };
+
+        let last = chunk.chunk_index + 1 >= chunk.chunk_count;
+        let delivered = collector.send(chunk).await.is_ok();
+        if last || !delivered {
+            self.member_collectors.remove(&nonce);
         }
     }
 

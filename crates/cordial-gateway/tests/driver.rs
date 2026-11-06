@@ -240,3 +240,47 @@ async fn reconnect_opcode_makes_a_new_connection() {
     let resume = expect_op(&mut socket, 6).await;
     assert_eq!(resume["d"]["session_id"], "session-1");
 }
+
+#[tokio::test]
+async fn collects_member_chunks_by_nonce() {
+    let (listener, url) = listen().await;
+    let (shard, mut events) = Shard::start(config(&url));
+    let mut socket = accept(&listener).await;
+    send_json(
+        &mut socket,
+        &json!({"op": 10, "d": {"heartbeat_interval": 45000}}),
+    )
+    .await;
+    expect_op(&mut socket, 2).await;
+    send_json(&mut socket, &ready(&url)).await;
+    next_matching(&mut events, |event| {
+        matches!(event, ShardEvent::Lifecycle(Lifecycle::Ready { .. }))
+    })
+    .await;
+
+    let guild = cordial_model::id::GuildId::new_const(100);
+    let request = cordial_model::gateway::RequestGuildMembers::users(
+        guild,
+        vec![
+            cordial_model::id::UserId::new_const(7),
+            cordial_model::id::UserId::new_const(8),
+        ],
+    );
+    let chunks = shard.request_members(request).await.unwrap();
+
+    let payload = expect_op(&mut socket, 8).await;
+    let nonce = payload["d"]["nonce"].as_str().unwrap().to_owned();
+    let member = |id: &str| json!({"user": {"id": id, "username": "u", "discriminator": "0", "avatar": null}, "roles": [], "joined_at": "2026-01-01T00:00:00+00:00", "deaf": false, "mute": false, "flags": 0});
+    for (index, id) in ["7", "8"].iter().enumerate() {
+        send_json(&mut socket, &json!({"op": 0, "s": 2 + index, "t": "GUILD_MEMBERS_CHUNK", "d": {
+            "guild_id": "100", "members": [member(id)], "chunk_index": index, "chunk_count": 2, "nonce": nonce
+        }}))
+        .await;
+    }
+
+    let (members, not_found) = tokio::time::timeout(Duration::from_secs(5), chunks.collect())
+        .await
+        .unwrap();
+    assert_eq!(members.len(), 2);
+    assert!(not_found.is_empty());
+}

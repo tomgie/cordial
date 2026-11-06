@@ -406,6 +406,20 @@ async fn main() -> Result<(), Error> {
 - Each event runs in a new task by default. A setting gives ordered handling for each guild.
 - A handler error goes to one error hook. A panic in a handler does not stop the bot.
 
+Intent check (on by default, configurable to "warn", "error", or "off"):
+
+| Check | Source | Result |
+|---|---|---|
+| A handler or the cache needs an intent that is not set | Router handlers, cache resource types, event-to-intent table | Warning, or error in strict mode |
+| An intent is set, but nothing uses it | The same table | Info: remove it to get fewer events |
+| A requested privileged intent is not on in the Developer Portal | `GET /applications/@me` flags (`GATEWAY_*` and `GATEWAY_*_LIMITED`) | Error before connect, with the name of the intent and the portal page |
+| Message handlers without `MESSAGE_CONTENT` | Router handlers | One warning: content fields will be empty except for mentions, DMs, and own messages |
+| Close code 4013 or 4014 | Gateway | Fatal error that names the intents, from the application flags |
+| Unknown dispatch event | Gateway | One debug log for each event name |
+
+- The check cannot predict privileged intent approval. Approval needs a review at 10,000 users, renewed each year.
+- The gateway crate gives the close-code part. The framework gives the parts that need handler knowledge.
+
 ### 9.3 Commands
 
 ```rust

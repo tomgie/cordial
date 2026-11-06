@@ -211,6 +211,48 @@ impl std::str::FromStr for ApplicationIntegrationType {
     }
 }
 
+/// The installation contexts that authorized an interaction.
+///
+/// For a guild installation, the value is the guild ID, or `"0"` in the DM with the bot.
+/// For a user installation, the value is the user ID.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct AuthorizingIntegrationOwners(pub HashMap<ApplicationIntegrationType, String>);
+
+impl AuthorizingIntegrationOwners {
+    /// Gives the guild of a guild installation. `None` also in the DM with the bot.
+    #[must_use]
+    pub fn guild_id(&self) -> Option<GuildId> {
+        self.0
+            .get(&ApplicationIntegrationType::GuildInstall)
+            .and_then(|value| value.parse().ok())
+    }
+
+    /// Tells if a guild installation authorized the interaction.
+    #[must_use]
+    pub fn is_guild_install(&self) -> bool {
+        self.0
+            .contains_key(&ApplicationIntegrationType::GuildInstall)
+    }
+
+    /// Gives the user of a user installation.
+    #[must_use]
+    pub fn user_id(&self) -> Option<UserId> {
+        self.0
+            .get(&ApplicationIntegrationType::UserInstall)
+            .and_then(|value| value.parse().ok())
+    }
+
+    /// Tells if only a user installation authorized the interaction.
+    #[must_use]
+    pub fn is_user_install_only(&self) -> bool {
+        self.0.len() == 1
+            && self
+                .0
+                .contains_key(&ApplicationIntegrationType::UserInstall)
+    }
+}
+
 crate::discord_enum! {
     /// Tells if webhook events are on for an application.
     pub enum EventWebhookStatus: u8 {

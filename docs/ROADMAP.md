@@ -107,6 +107,7 @@ Exit: a test bot sends a message with an attachment. Rate-limit tests pass for a
 - [ ] All dispatch event structs and the `Event` enum (see research/01-gateway.md section 7). Include RATE_LIMITED, CHANNEL_INFO, SOUNDBOARD_SOUNDS, VOICE_CHANNEL_STATUS_UPDATE, VOICE_CHANNEL_START_TIME_UPDATE.
 - [ ] `EventType` flags and two-step decode with an event filter.
 - [ ] Sans-IO `ShardCore`: Hello, Identify, heartbeat with jitter, ACK tracking, zombie detection, Resume, op 7, op 9, all close codes.
+- [ ] Close codes 4013 and 4014 give a fatal error that names the intents.
 - [ ] Shard driver with `tokio-tungstenite`.
 - [ ] `zlib-stream` decompression. `zstd-stream` behind a feature.
 - [ ] Send limiter (120 per 60 s, heartbeat reserve), 4096-byte check.
@@ -166,6 +167,7 @@ Exit: event sequence tests pass. A recorded event log of 1 hour replays without 
 
 - [ ] `Bot` builder, `Context<S>`, typed state.
 - [ ] Event router with `on::<E>`, intent computation, privileged-intent warnings.
+- [ ] Intent check: missing intents, unused intents, privileged intents against application flags, `MESSAGE_CONTENT` warning (ARCHITECTURE 9.2).
 - [ ] Task model: one task per event, optional ordered mode per guild, panic isolation, error hook.
 - [ ] `#[derive(Command)]`, `#[derive(CommandGroup)]`, `#[derive(Choice)]`, `#[derive(Modal)]`.
 - [ ] Option types: primitives, resolved users, members, roles, channels, attachments, mentionables.

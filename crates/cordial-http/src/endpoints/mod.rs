@@ -4,7 +4,12 @@
 
 pub mod channel;
 pub mod gateway;
+pub mod identity;
+pub mod lobby;
 pub mod message;
+pub mod monetization;
+pub mod oauth2;
+pub mod partner_sdk;
 pub mod user;
 
 /// Implements `IntoFuture` for a request type with a `client` field.

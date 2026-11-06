@@ -64,7 +64,7 @@ impl WebhookEventBody {
                 WebhookEvent::ApplicationAuthorized(Box::new(serde_json::from_value(data)?))
             }
             WebhookEventType::ApplicationDeauthorized => {
-                WebhookEvent::ApplicationDeauthorized(serde_json::from_value(data)?)
+                WebhookEvent::ApplicationDeauthorized(Box::new(serde_json::from_value(data)?))
             }
             WebhookEventType::EntitlementCreate => {
                 WebhookEvent::EntitlementCreate(Box::new(serde_json::from_value(data)?))
@@ -123,7 +123,7 @@ pub enum WebhookEvent {
     /// A user authorized the application.
     ApplicationAuthorized(Box<ApplicationAuthorized>),
     /// A user deauthorized the application.
-    ApplicationDeauthorized(ApplicationDeauthorized),
+    ApplicationDeauthorized(Box<ApplicationDeauthorized>),
     /// An entitlement was made.
     EntitlementCreate(Box<Entitlement>),
     /// An entitlement changed.

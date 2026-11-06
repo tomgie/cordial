@@ -220,6 +220,10 @@ dependencies = [
  "cordial-http",
  "cordial-macros",
  "cordial-model",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

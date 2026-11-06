@@ -21,6 +21,13 @@ cordial-http.workspace = true
 cordial-gateway.workspace = true
 cordial-cache.workspace = true
 cordial-macros.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+cordial-http = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [lints]
 workspace = true

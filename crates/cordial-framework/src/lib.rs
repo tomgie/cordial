@@ -4,6 +4,7 @@
 
 pub mod command;
 pub mod modal;
+pub mod sync;
 
 pub use command::{Command, CommandArg, CommandOptions, CommandTarget, ParseError};
 pub use cordial_macros::{Choice, Command, CommandGroup, Modal};

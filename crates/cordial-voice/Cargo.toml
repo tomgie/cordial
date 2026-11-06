@@ -46,5 +46,11 @@ zeroize.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util", "net"] }
 
+# The test starts its own binary as a child process. A harness writes text to the standard
+# output, which the child uses for PCM.
+[[test]]
+name = "process"
+harness = false
+
 [lints]
 workspace = true

@@ -2,8 +2,12 @@
 
 use std::fmt;
 use std::io::{ErrorKind, Read};
+use std::time::Duration;
 
-use super::{AudioError, AudioSource, FRAME_LEN, SourceFrame};
+use super::{
+    AudioError, AudioSource, CHANNELS, FRAME_LEN, SourceFrame, duration_to_samples,
+    samples_to_duration,
+};
 
 enum Input {
     F32(Vec<f32>),
@@ -13,7 +17,8 @@ enum Input {
 
 /// A source of raw PCM: interleaved stereo samples at 48 kHz.
 ///
-/// It needs the `opus` feature to be sent, because the send task encodes it.
+/// It needs the `opus` feature to be sent, because the send task encodes it. A source from
+/// memory can seek to the exact sample. A source from a reader cannot seek.
 pub struct PcmSource {
     input: Input,
     position: usize,
@@ -62,31 +67,33 @@ impl PcmSource {
             finished: false,
         }
     }
+}
 
-    fn read_frame(reader: &mut dyn Read) -> Result<Option<Vec<f32>>, AudioError> {
-        let mut bytes = vec![0_u8; FRAME_LEN * 2];
-        let mut filled = 0;
-        while filled < bytes.len() {
-            match reader.read(&mut bytes[filled..]) {
-                Ok(0) => break,
-                Ok(count) => filled += count,
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => return Err(error.into()),
-            }
+/// Reads one frame of signed 16-bit little-endian stereo samples. Pads a short last frame
+/// with silence. Gives `Ok(None)` at the end of the input.
+pub(super) fn read_pcm_frame(reader: &mut dyn Read) -> Result<Option<Vec<f32>>, AudioError> {
+    let mut bytes = vec![0_u8; FRAME_LEN * 2];
+    let mut filled = 0;
+    while filled < bytes.len() {
+        match reader.read(&mut bytes[filled..]) {
+            Ok(0) => break,
+            Ok(count) => filled += count,
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
         }
-        if filled < 2 {
-            return Ok(None);
-        }
-
-        let mut frame: Vec<f32> = bytes[..filled - filled % 2]
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .map(|pair| i16_to_f32(i16::from_le_bytes(*pair)))
-            .collect();
-        frame.resize(FRAME_LEN, 0.0);
-        Ok(Some(frame))
     }
+    if filled < 2 {
+        return Ok(None);
+    }
+
+    let mut frame: Vec<f32> = bytes[..filled - filled % 2]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| i16_to_f32(i16::from_le_bytes(*pair)))
+        .collect();
+    frame.resize(FRAME_LEN, 0.0);
+    Ok(Some(frame))
 }
 
 impl AudioSource for PcmSource {
@@ -98,13 +105,33 @@ impl AudioSource for PcmSource {
         let frame = match &mut self.input {
             Input::F32(samples) => take_frame(samples, self.position, |sample| sample),
             Input::I16(samples) => take_frame(samples, self.position, i16_to_f32),
-            Input::Reader(reader) => Self::read_frame(reader.as_mut())?,
+            Input::Reader(reader) => read_pcm_frame(reader.as_mut())?,
         };
         self.position += FRAME_LEN;
         if frame.is_none() {
             self.finished = true;
         }
         Ok(frame.map(SourceFrame::Pcm))
+    }
+
+    fn seek(&mut self, position: Duration) -> Result<Duration, AudioError> {
+        let len = match &self.input {
+            Input::F32(samples) => samples.len(),
+            Input::I16(samples) => samples.len(),
+            Input::Reader(_) => {
+                return Err(AudioError::Unsupported(
+                    "a PCM source from a reader cannot seek".to_owned(),
+                ));
+            }
+        };
+
+        let target = usize::try_from(duration_to_samples(position)).unwrap_or(usize::MAX);
+        let start = target.saturating_mul(CHANNELS).min(len - len % CHANNELS);
+        self.position = start;
+        self.finished = false;
+        Ok(samples_to_duration(
+            u64::try_from(start / CHANNELS).unwrap_or(u64::MAX),
+        ))
     }
 }
 
@@ -178,6 +205,40 @@ mod tests {
         assert_eq!(frames.len(), 2);
         assert!((frames[1][0] + 0.5).abs() < f32::EPSILON);
         assert!(frames[1][FRAME_LEN / 2].abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn seek_in_memory() {
+        // Each stereo sample holds its own index, so the first value shows the position.
+        let samples: Vec<i16> = (0..FRAME_LEN * 3)
+            .map(|index| i16::try_from(index / CHANNELS).expect("small"))
+            .collect();
+        let mut source = PcmSource::from_i16(samples);
+        source.next_frame().expect("no error");
+
+        let position = source.seek(Duration::from_millis(30)).expect("seek");
+        assert_eq!(position, Duration::from_millis(30));
+        let Some(SourceFrame::Pcm(frame)) = source.next_frame().expect("no error") else {
+            panic!("PCM expected");
+        };
+        assert_eq!(f32_to_i16(frame[0]), 1440);
+        assert_eq!(f32_to_i16(frame[1]), 1440);
+
+        source.seek(Duration::ZERO).expect("seek");
+        assert_eq!(collect(source).len(), 3);
+
+        let mut source = PcmSource::from_f32(vec![0.5; FRAME_LEN]);
+        let position = source.seek(Duration::from_secs(10)).expect("seek");
+        assert_eq!(position, Duration::from_millis(20));
+        assert_eq!(source.next_frame().expect("no error"), None);
+        source.seek(Duration::from_millis(10)).expect("seek");
+        assert!(source.next_frame().expect("no error").is_some());
+
+        let mut source = PcmSource::from_reader(std::io::empty());
+        assert!(matches!(
+            source.seek(Duration::ZERO),
+            Err(AudioError::Unsupported(_))
+        ));
     }
 
     #[test]

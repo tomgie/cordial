@@ -6,14 +6,25 @@
 //! When one track plays alone at volume 1.0 and gives Opus packets (Ogg Opus), the packets go
 //! out without a new encode. In all other cases the mixer adds the PCM of the tracks. Then
 //! Opus packets must be decoded, which needs the `opus` feature.
+//!
+//! The send clock sends one packet each 20 ms. Thus only packets with a duration of a
+//! multiple of 20 ms go out without a new encode. The mixer decodes other packets (for
+//! example 10 ms packets) and encodes the audio again in 20 ms frames. Without the `opus`
+//! feature, a track with such packets ends with an error.
+//!
+//! [`TrackHandle::seek`] moves a track. The mixer applies the seek before the next frame.
 
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 #[cfg(feature = "opus")]
 use super::codec::OpusDecoder;
-use super::{AudioSource, FRAME_LEN, SourceFrame};
+use super::{
+    AudioSource, CHANNELS, FRAME_LEN, FRAME_SAMPLES, SourceFrame, duration_to_samples,
+    samples_to_duration,
+};
 
 /// The ID of a track in a mixer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -64,6 +75,22 @@ pub enum TrackEvent {
         /// Why the track ended.
         reason: EndReason,
     },
+    /// A seek of the track is complete.
+    Seeked {
+        /// The track.
+        track: TrackId,
+        /// The position that the track plays from now. It can be a little before the
+        /// requested position.
+        position: Duration,
+    },
+    /// A seek of the track failed, for example because its source cannot seek. The track
+    /// plays on from its old position.
+    SeekFailed {
+        /// The track.
+        track: TrackId,
+        /// The error.
+        error: String,
+    },
 }
 
 #[derive(Debug)]
@@ -71,6 +98,9 @@ struct Control {
     state: PlayState,
     volume: f32,
     stop: bool,
+    seek: Option<Duration>,
+    /// The number of samples for each channel that the track gave to the mixer output.
+    played: u64,
 }
 
 fn lock(control: &Mutex<Control>) -> MutexGuard<'_, Control> {
@@ -142,6 +172,22 @@ impl TrackHandle {
     #[must_use]
     pub fn state(&self) -> PlayState {
         lock(&self.control).state
+    }
+
+    /// Moves the track to a position from the start of its audio. The mixer applies the
+    /// seek before the next frame and sends [`TrackEvent::Seeked`] or
+    /// [`TrackEvent::SeekFailed`].
+    ///
+    /// The precision depends on the source. See [`AudioSource::seek`].
+    pub fn seek(&self, position: Duration) {
+        lock(&self.control).seek = Some(position);
+    }
+
+    /// Gives the position of the track: the duration of the audio that the track gave to the
+    /// mixer since its start or its last seek.
+    #[must_use]
+    pub fn position(&self) -> Duration {
+        samples_to_duration(lock(&self.control).played)
     }
 }
 
@@ -269,21 +315,62 @@ impl Active {
         }
     }
 
-    /// Reads frames until the backlog has one frame or the source ends.
-    fn fill_backlog(&mut self) {
+    /// Reads frames until the backlog has one frame or the source ends. Gives `false` when
+    /// the source waits for audio and the backlog has less than one frame.
+    fn fill_backlog(&mut self) -> bool {
         while self.backlog.len() < FRAME_LEN {
-            let Some(frame) = self.pull() else {
-                return;
-            };
-            match frame {
-                SourceFrame::Pcm(samples) => self.backlog.extend(samples),
-                SourceFrame::Opus { packet, samples } => self.decode_into_backlog(&packet, samples),
+            match self.pull() {
+                Some(SourceFrame::Pcm(samples)) => self.backlog.extend(samples),
+                Some(SourceFrame::Opus {
+                    packet,
+                    samples,
+                    discard_start,
+                    discard_end,
+                }) => self.decode_into_backlog(&packet, samples, discard_start, discard_end),
+                Some(SourceFrame::Waiting) => return false,
+                None => return true,
+            }
+        }
+        true
+    }
+
+    /// Applies a seek and gives the event for it.
+    fn seek(&mut self, position: Duration) -> TrackEvent {
+        match self.source.seek(position) {
+            Ok(actual) => {
+                self.backlog.clear();
+                self.wait = 0;
+                self.source_done = false;
+                self.error = None;
+                // The decoder state belongs to the old position.
+                #[cfg(feature = "opus")]
+                {
+                    self.decoder = None;
+                }
+                lock(&self.control).played = duration_to_samples(actual);
+                TrackEvent::Seeked {
+                    track: self.id,
+                    position: actual,
+                }
+            }
+            Err(error) => {
+                tracing::debug!(track = self.id.0, %error, "a track cannot seek");
+                TrackEvent::SeekFailed {
+                    track: self.id,
+                    error: error.to_string(),
+                }
             }
         }
     }
 
     #[cfg(feature = "opus")]
-    fn decode_into_backlog(&mut self, packet: &[u8], _samples: u32) {
+    fn decode_into_backlog(
+        &mut self,
+        packet: &[u8],
+        _samples: u32,
+        discard_start: u32,
+        discard_end: u32,
+    ) {
         if self.decoder.is_none() {
             match OpusDecoder::new() {
                 Ok(decoder) => self.decoder = Some(decoder),
@@ -298,13 +385,28 @@ impl Active {
             return;
         };
         match decoder.decode_float(packet) {
-            Ok(pcm) => self.backlog.extend(pcm),
+            Ok(pcm) => {
+                let decoded = pcm.len() / CHANNELS;
+                let start = usize::try_from(discard_start)
+                    .unwrap_or(usize::MAX)
+                    .min(decoded);
+                let end = decoded
+                    .saturating_sub(usize::try_from(discard_end).unwrap_or(usize::MAX))
+                    .max(start);
+                self.backlog.extend(&pcm[start * CHANNELS..end * CHANNELS]);
+            }
             Err(error) => tracing::debug!(%error, "cannot decode an Opus packet of a track"),
         }
     }
 
     #[cfg(not(feature = "opus"))]
-    fn decode_into_backlog(&mut self, _packet: &[u8], samples: u32) {
+    fn decode_into_backlog(
+        &mut self,
+        _packet: &[u8],
+        samples: u32,
+        discard_start: u32,
+        discard_end: u32,
+    ) {
         if !self.warned {
             tracing::warn!(
                 track = self.id.0,
@@ -312,8 +414,34 @@ impl Active {
             );
             self.warned = true;
         }
-        let silent = usize::try_from(samples).unwrap_or(super::FRAME_SAMPLES) * super::CHANNELS;
+        let kept = samples
+            .saturating_sub(discard_start)
+            .saturating_sub(discard_end);
+        let silent = usize::try_from(kept).unwrap_or(FRAME_SAMPLES) * CHANNELS;
         self.backlog.extend(std::iter::repeat_n(0.0, silent));
+    }
+
+    /// Handles an Opus packet that is not a multiple of 20 ms: the send clock cannot send
+    /// it without a new encode.
+    #[cfg(feature = "opus")]
+    fn take_unaligned_packet(&mut self, packet: &[u8], samples: u32, discard: (u32, u32)) {
+        self.decode_into_backlog(packet, samples, discard.0, discard.1);
+    }
+
+    #[cfg(not(feature = "opus"))]
+    fn take_unaligned_packet(&mut self, _packet: &[u8], samples: u32, _discard: (u32, u32)) {
+        tracing::warn!(
+            track = self.id.0,
+            samples,
+            "Opus packets that are not a multiple of 20 ms need the `opus` feature; the track is skipped"
+        );
+        self.error = Some(
+            super::AudioError::Unsupported(format!(
+                "Opus packets of {samples} samples need the `opus` feature"
+            ))
+            .to_string(),
+        );
+        self.source_done = true;
     }
 
     fn can_pass_through(&self, volume: f32) -> bool {
@@ -376,6 +504,8 @@ impl Mixer {
             state,
             volume: track.volume,
             stop: false,
+            seek: None,
+            played: 0,
         }));
         let handle = TrackHandle {
             id,
@@ -436,6 +566,7 @@ impl Mixer {
     pub fn next_frame(&mut self) -> MixOutput {
         self.remove_stopped();
         self.promote();
+        self.apply_seeks();
         let output = self.produce();
         // When the current queue track ended, the next one starts without a gap.
         if output == MixOutput::Idle && self.promote() {
@@ -455,6 +586,15 @@ impl Mixer {
         self.events.push(TrackEvent::Started(next.id));
         self.active.push(next);
         true
+    }
+
+    fn apply_seeks(&mut self) {
+        for track in self.active.iter_mut().chain(self.queue.iter_mut()) {
+            let Some(position) = lock(&track.control).seek.take() else {
+                continue;
+            };
+            self.events.push(track.seek(position));
+        }
     }
 
     fn remove_stopped(&mut self) {
@@ -512,17 +652,30 @@ impl Mixer {
             return self.produce_mix(&[index]);
         }
 
+        let frame_samples = u32::try_from(FRAME_SAMPLES).unwrap_or(960);
         match track.pull() {
-            Some(SourceFrame::Opus { packet, samples }) => {
-                let steps = samples.div_ceil(u32::try_from(super::FRAME_SAMPLES).unwrap_or(960));
-                track.wait = steps.saturating_sub(1);
+            Some(SourceFrame::Opus {
+                packet,
+                samples,
+                discard_start,
+                discard_end,
+            }) => {
+                if samples % frame_samples != 0 {
+                    track.take_unaligned_packet(&packet, samples, (discard_start, discard_end));
+                    return self.produce_mix(&[index]);
+                }
+                track.wait = (samples / frame_samples).saturating_sub(1);
+                // The position follows the decoded time line, so it does not count the
+                // samples that a decode drops.
+                let kept = samples.saturating_sub(discard_start.saturating_add(discard_end));
+                lock(&track.control).played += u64::from(kept);
                 MixOutput::Opus { packet, samples }
             }
             Some(SourceFrame::Pcm(samples)) => {
                 track.backlog.extend(samples);
                 self.produce_mix(&[index])
             }
-            None => MixOutput::Idle,
+            Some(SourceFrame::Waiting) | None => MixOutput::Idle,
         }
     }
 
@@ -531,12 +684,17 @@ impl Mixer {
         let mut any = false;
         for &index in indices {
             let track = &mut self.active[index];
-            track.fill_backlog();
-            if track.backlog.is_empty() {
+            // A track that waits for audio keeps its part of a frame for the next step.
+            if !track.fill_backlog() || track.backlog.is_empty() {
                 continue;
             }
-            let volume = lock(&track.control).volume;
+
             let count = track.backlog.len().min(FRAME_LEN);
+            let volume = {
+                let mut control = lock(&track.control);
+                control.played += u64::try_from(count / CHANNELS).unwrap_or(0);
+                control.volume
+            };
             for (output, sample) in mix.iter_mut().zip(track.backlog.drain(..count)) {
                 *output += sample * volume;
             }
@@ -572,6 +730,7 @@ impl Mixer {
 mod tests {
     use super::*;
     use crate::audio::AudioError;
+    use crate::audio::ogg::OggOpusSource;
     use crate::audio::pcm::PcmSource;
 
     /// A source that gives scripted frames, then an optional error.
@@ -584,10 +743,7 @@ mod tests {
         fn opus(packets: &[&[u8]]) -> Self {
             let frames = packets
                 .iter()
-                .map(|packet| SourceFrame::Opus {
-                    packet: packet.to_vec(),
-                    samples: crate::audio::opus_packet_samples(packet).unwrap_or(960),
-                })
+                .map(|packet| SourceFrame::opus(packet.to_vec()))
                 .collect();
             Self {
                 frames,
@@ -774,7 +930,7 @@ mod tests {
             .into_iter()
             .filter_map(|event| match event {
                 TrackEvent::Ended { track, reason } => Some((track, reason)),
-                TrackEvent::Started(_) => None,
+                _ => None,
             })
             .collect();
         assert_eq!(
@@ -808,6 +964,152 @@ mod tests {
         for track in [playing, waiting, later] {
             assert_eq!(track.state(), PlayState::Ended);
         }
+    }
+
+    #[test]
+    fn seek_and_position() {
+        // Each frame holds its index divided by 10.
+        let samples: Vec<f32> = (0..FRAME_LEN * 5)
+            .map(|index| f32::from(u16::try_from(index / FRAME_LEN).expect("small")) / 10.0)
+            .collect();
+        let mut mixer = Mixer::new();
+        let track = mixer.play(PcmSource::from_f32(samples));
+        assert!(pcm(&mixer.next_frame())[0].abs() < 1e-6);
+        assert_eq!(track.position(), Duration::from_millis(20));
+
+        track.seek(Duration::from_millis(60));
+        assert!((pcm(&mixer.next_frame())[0] - 0.3).abs() < 1e-6);
+        assert_eq!(track.position(), Duration::from_millis(80));
+        assert!(mixer.take_events().contains(&TrackEvent::Seeked {
+            track: track.id(),
+            position: Duration::from_millis(60),
+        }));
+
+        let scripted = mixer.play(Script::opus(&[&[0xFC, 1]]));
+        scripted.seek(Duration::from_secs(1));
+        mixer.next_frame();
+        assert!(mixer.take_events().iter().any(|event| matches!(
+            event,
+            TrackEvent::SeekFailed { track, .. } if *track == scripted.id()
+        )));
+    }
+
+    #[test]
+    fn ogg_seek_passes_through() {
+        let packets: Vec<Vec<u8>> = (0..10).map(|index| vec![0xFC, index]).collect();
+        let file = crate::audio::ogg::tests::build_file(0, &packets, 4, None);
+        let mut mixer = Mixer::new();
+        let track = mixer.play(OggOpusSource::from_bytes(file).expect("valid"));
+        assert_eq!(
+            mixer.next_frame(),
+            MixOutput::Opus {
+                packet: vec![0xFC, 0],
+                samples: 960
+            }
+        );
+
+        // 130 ms is in packet 6 (120 ms to 140 ms). The whole packet goes out.
+        track.seek(Duration::from_millis(130));
+        assert_eq!(
+            mixer.next_frame(),
+            MixOutput::Opus {
+                packet: vec![0xFC, 6],
+                samples: 960
+            }
+        );
+        assert_eq!(track.position(), Duration::from_millis(140));
+    }
+
+    #[test]
+    fn waiting_source_keeps_its_track() {
+        let frames = VecDeque::from([
+            SourceFrame::Waiting,
+            SourceFrame::Pcm(vec![0.5; FRAME_LEN]),
+            SourceFrame::Waiting,
+            SourceFrame::Pcm(vec![0.25; FRAME_LEN]),
+        ]);
+        let mut mixer = Mixer::new();
+        let track = mixer.play(Script {
+            frames,
+            fail: false,
+        });
+        assert_eq!(mixer.next_frame(), MixOutput::Idle);
+        assert_eq!(track.state(), PlayState::Playing);
+        assert!((pcm(&mixer.next_frame())[0] - 0.5).abs() < 1e-6);
+        assert_eq!(mixer.next_frame(), MixOutput::Idle);
+        assert!((pcm(&mixer.next_frame())[0] - 0.25).abs() < 1e-6);
+        assert_eq!(mixer.next_frame(), MixOutput::Idle);
+        assert_eq!(track.state(), PlayState::Ended);
+
+        // In a mix, the other track plays while one track waits.
+        let frames = VecDeque::from([SourceFrame::Waiting, SourceFrame::Pcm(vec![0.5; FRAME_LEN])]);
+        mixer.play(Script {
+            frames,
+            fail: false,
+        });
+        mixer.play(constant(0.25, 2));
+        assert!((pcm(&mixer.next_frame())[0] - 0.25).abs() < 1e-6);
+        assert!((pcm(&mixer.next_frame())[0] - 0.75).abs() < 1e-6);
+    }
+
+    #[cfg(not(feature = "opus"))]
+    #[test]
+    fn short_packets_need_opus() {
+        let mut mixer = Mixer::new();
+        // CELT packets of 10 ms.
+        let track = mixer.play(Script::opus(&[&[0xF0, 1], &[0xF0, 2]]));
+        assert_eq!(mixer.next_frame(), MixOutput::Idle);
+        assert_eq!(track.state(), PlayState::Ended);
+        assert!(mixer.take_events().iter().any(|event| matches!(
+            event,
+            TrackEvent::Ended {
+                reason: EndReason::Error(_),
+                ..
+            }
+        )));
+    }
+
+    #[cfg(feature = "opus")]
+    #[test]
+    fn short_packets_are_encoded_again() {
+        let mut encoder =
+            opus::Encoder::new(48_000, opus::Channels::Stereo, opus::Application::Audio)
+                .expect("encoder");
+        let packet = encoder
+            .encode_vec_float(&vec![0.0; FRAME_LEN / 2], 1275)
+            .expect("encode");
+        assert_eq!(crate::audio::opus_packet_samples(&packet), Some(480));
+
+        let mut mixer = Mixer::new();
+        let track = mixer.play(Script::opus(&[packet.as_slice(); 4]));
+        assert!(matches!(mixer.next_frame(), MixOutput::Pcm(_)));
+        assert!(matches!(mixer.next_frame(), MixOutput::Pcm(_)));
+        assert_eq!(mixer.next_frame(), MixOutput::Idle);
+        assert_eq!(track.position(), Duration::from_millis(40));
+        assert_eq!(track.state(), PlayState::Ended);
+    }
+
+    #[cfg(feature = "opus")]
+    #[test]
+    fn pre_skip_and_end_trim_are_decoded() {
+        let mut encoder = crate::audio::codec::OpusEncoder::new().expect("encoder");
+        let packets: Vec<Vec<u8>> = (0..5)
+            .map(|_| encoder.encode(&vec![0.0; FRAME_LEN]).expect("encode"))
+            .collect();
+        let file = crate::audio::ogg::tests::build_file(312, &packets, 2, Some(4800 - 200));
+
+        let mut mixer = Mixer::new();
+        let source = OggOpusSource::from_bytes(file).expect("valid");
+        // A volume change makes the mixer decode the packets.
+        let track = mixer.play(Track::new(source).volume(0.5));
+        let mut frames = 0;
+        while let MixOutput::Pcm(_) = mixer.next_frame() {
+            frames += 1;
+        }
+        // 4800 - 312 - 200 = 4288 samples: four full frames and one part of a frame.
+        assert_eq!(frames, 5);
+        assert_eq!(track.position(), samples_to_duration(4288));
+        assert_eq!(track.state(), PlayState::Ended);
     }
 
     #[cfg(feature = "opus")]

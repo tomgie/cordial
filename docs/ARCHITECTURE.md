@@ -555,7 +555,8 @@ gateway (op 4) --> VOICE_STATE_UPDATE + VOICE_SERVER_UPDATE
   - Raw PCM (`f32` or `i16`, 48 kHz, stereo).
   - Ogg Opus files. These go out without a new encode.
   - A decode feature with `symphonia` for common formats.
-  - A process input (for example `ffmpeg`) through a feature.
+  - A process input (for example `ffmpeg`). It uses only the standard library, so it needs no feature.
+- Seek: PCM in memory, Ogg Opus files, and the `symphonia` decode. Ogg Opus applies the pre-skip and the end trim when the mixer decodes it.
 - Receive: a jitter buffer for each SSRC, Opus decode with loss concealment, and events with the user ID and PCM.
 - Soundboard: an HTTP call, but the bot must be in the voice channel. The `Call` API gives a helper.
 

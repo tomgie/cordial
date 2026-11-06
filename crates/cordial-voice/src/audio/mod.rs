@@ -12,6 +12,7 @@ pub mod decode;
 pub mod mixer;
 pub mod ogg;
 pub mod pcm;
+pub mod process;
 
 /// The sample rate.
 pub const SAMPLE_RATE: u32 = 48_000;
@@ -35,12 +36,40 @@ pub enum SourceFrame {
     /// 20 ms of PCM: [`FRAME_LEN`] interleaved stereo samples in -1.0 to 1.0.
     Pcm(Vec<f32>),
     /// An Opus packet that goes out without a new encode.
+    ///
+    /// The discard values apply only when the mixer decodes the packet. A packet that goes
+    /// out without a new encode plays in full, because an Opus packet cannot be cut.
     Opus {
         /// The Opus packet.
         packet: Vec<u8>,
         /// The duration of the packet in samples for each channel at 48 kHz.
         samples: u32,
+        /// The number of decoded samples for each channel to drop at the start of the packet,
+        /// for example the Ogg Opus pre-skip or the part before a seek position.
+        discard_start: u32,
+        /// The number of decoded samples for each channel to drop at the end of the packet,
+        /// for example the Ogg Opus end trim.
+        discard_end: u32,
     },
+    /// The source has no audio now, but it is not at its end. The mixer asks again on the
+    /// next frame. A source that reads from another thread or a program gives this frame
+    /// when its buffer is empty.
+    Waiting,
+}
+
+impl SourceFrame {
+    /// Makes an Opus frame that plays in full. The duration comes from the packet. A packet
+    /// that is not valid counts as 20 ms.
+    #[must_use]
+    pub fn opus(packet: Vec<u8>) -> Self {
+        let samples = opus_packet_samples(&packet).unwrap_or(960);
+        Self::Opus {
+            packet,
+            samples,
+            discard_start: 0,
+            discard_end: 0,
+        }
+    }
 }
 
 /// An error of an audio source or of the codec.
@@ -59,12 +88,17 @@ pub enum AudioError {
     /// The Opus codec failed.
     #[error("the Opus codec failed: {0}")]
     Codec(String),
+    /// An external program failed: it cannot start, or it exits with an error.
+    #[error("the audio program failed: {0}")]
+    Process(String),
 }
 
 /// A source of audio frames.
 ///
 /// The send task calls [`AudioSource::next_frame`] once for each 20 ms frame, on the Tokio
-/// runtime. Keep the call fast: read from memory or from a file, not from the network.
+/// runtime. Keep the call fast: read from memory or from a file, not from the network. A
+/// source that reads from a slow input reads on another thread and gives
+/// [`SourceFrame::Waiting`] when it has no audio yet.
 pub trait AudioSource: Send + 'static {
     /// Gives the next frame. Gives `Ok(None)` at the end of the audio.
     ///
@@ -72,12 +106,53 @@ pub trait AudioSource: Send + 'static {
     ///
     /// Gives an error when the input fails. The track ends.
     fn next_frame(&mut self) -> Result<Option<SourceFrame>, AudioError>;
+
+    /// Moves the source to a position from the start of the audio. The mixer calls it
+    /// between two frames. Gives the position that the next frame starts at.
+    ///
+    /// A position after the end is not an error: the source then has no more frames.
+    ///
+    /// # Errors
+    ///
+    /// The default implementation gives [`AudioError::Unsupported`]. A source that can seek
+    /// gives an error when the input fails.
+    fn seek(&mut self, position: Duration) -> Result<Duration, AudioError> {
+        let _ = position;
+        Err(AudioError::Unsupported(
+            "this audio source cannot seek".to_owned(),
+        ))
+    }
 }
 
 impl AudioSource for Box<dyn AudioSource> {
     fn next_frame(&mut self) -> Result<Option<SourceFrame>, AudioError> {
         (**self).next_frame()
     }
+
+    fn seek(&mut self, position: Duration) -> Result<Duration, AudioError> {
+        (**self).seek(position)
+    }
+}
+
+/// Converts a duration to a number of samples for each channel at 48 kHz. Rounds to the
+/// nearest sample.
+#[must_use]
+pub fn duration_to_samples(duration: Duration) -> u64 {
+    let rate = u64::from(SAMPLE_RATE);
+    let fraction = (u64::from(duration.subsec_nanos()) * rate + 500_000_000) / 1_000_000_000;
+    duration
+        .as_secs()
+        .saturating_mul(rate)
+        .saturating_add(fraction)
+}
+
+/// Converts a number of samples for each channel at 48 kHz to a duration. Rounds down.
+#[must_use]
+pub fn samples_to_duration(samples: u64) -> Duration {
+    let rate = u64::from(SAMPLE_RATE);
+    let nanos = (samples % rate) * 1_000_000_000 / rate;
+    // The remainder is less than one second, so the value fits in u32.
+    Duration::new(samples / rate, u32::try_from(nanos).unwrap_or(0))
 }
 
 /// Gives the duration of an Opus packet in samples for each channel at 48 kHz, from its
@@ -122,5 +197,19 @@ mod tests {
         assert_eq!(opus_packet_samples(&[0xFB, 0x00]), None);
         assert_eq!(opus_packet_samples(&[0xFB, 0x07]), None);
         assert_eq!(opus_packet_samples(&[]), None);
+    }
+
+    #[test]
+    fn sample_conversions() {
+        assert_eq!(duration_to_samples(Duration::from_millis(20)), 960);
+        assert_eq!(duration_to_samples(Duration::from_secs(3)), 144_000);
+        assert_eq!(samples_to_duration(960), Duration::from_millis(20));
+        assert_eq!(
+            samples_to_duration(48_000 * 7 + 24_000),
+            Duration::from_millis(7_500)
+        );
+        for samples in [0, 1, 312, 47_999, 1_000_003] {
+            assert_eq!(duration_to_samples(samples_to_duration(samples)), samples);
+        }
     }
 }

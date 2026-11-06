@@ -6,10 +6,14 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, ErrorKind, Read, Write};
+use std::io::{BufReader, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
+use std::time::Duration;
 
-use super::{AudioError, AudioSource, FRAME_SAMPLES, SourceFrame, opus_packet_samples};
+use super::{
+    AudioError, AudioSource, FRAME_SAMPLES, SourceFrame, duration_to_samples, opus_packet_samples,
+    samples_to_duration,
+};
 
 const CAPTURE_PATTERN: &[u8; 4] = b"OggS";
 const HEADER_LEN: usize = 27;
@@ -123,6 +127,10 @@ impl<R: Read> OggPageReader<R> {
         Self { reader }
     }
 
+    fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
     /// Reads the next page. Gives `Ok(None)` at the end of the input.
     ///
     /// # Errors
@@ -180,7 +188,7 @@ impl<R: Read> OggPageReader<R> {
 }
 
 /// Fills `buffer`. Gives `false` when the input ends before the first byte.
-fn read_full(reader: &mut impl Read, buffer: &mut [u8]) -> Result<bool, AudioError> {
+fn read_full(reader: &mut (impl Read + ?Sized), buffer: &mut [u8]) -> Result<bool, AudioError> {
     let mut filled = 0;
     while filled < buffer.len() {
         match reader.read(&mut buffer[filled..]) {
@@ -198,12 +206,22 @@ fn truncated() -> AudioError {
     AudioError::Format("the Ogg input ends inside a page".to_owned())
 }
 
+/// The end of a page. It goes with the last packet that ends on the page.
+#[derive(Clone, Copy, Debug)]
+struct PageEnd {
+    granule: i64,
+    last: bool,
+}
+
+/// A packet with the end of its page, when it is the last packet that ends on the page.
+type Packet = (Vec<u8>, Option<PageEnd>);
+
 /// Reads the packets of the first logical stream of an Ogg file.
 pub struct OggPacketReader<R> {
     pages: OggPageReader<R>,
     serial: Option<u32>,
     partial: Vec<u8>,
-    packets: VecDeque<Vec<u8>>,
+    packets: VecDeque<Packet>,
     ended: bool,
 }
 
@@ -235,6 +253,12 @@ impl<R: Read> OggPacketReader<R> {
     ///
     /// Gives an error when a page is not valid.
     pub fn next_packet(&mut self) -> Result<Option<Vec<u8>>, AudioError> {
+        Ok(self.next_packet_with_end()?.map(|(packet, _)| packet))
+    }
+
+    /// Reads the next packet, with the page end when the packet is the last one that ends on
+    /// its page.
+    fn next_packet_with_end(&mut self) -> Result<Option<Packet>, AudioError> {
         loop {
             if let Some(packet) = self.packets.pop_front() {
                 return Ok(Some(packet));
@@ -250,6 +274,39 @@ impl<R: Read> OggPacketReader<R> {
         }
     }
 
+    /// Forgets the read state. Call it after the input moves to the start of a page.
+    fn restart(&mut self) {
+        self.partial.clear();
+        self.packets.clear();
+        self.ended = false;
+    }
+
+    /// Reads the next page of the stream and drops the packets that end on it. Keeps the
+    /// start of a packet that continues on the next page.
+    fn skip_page(&mut self) -> Result<(), AudioError> {
+        loop {
+            let Some(page) = self.pages.next_page()? else {
+                self.ended = true;
+                return Ok(());
+            };
+            if self.serial.is_some_and(|serial| serial != page.serial) {
+                continue;
+            }
+
+            let mut offset = 0;
+            let mut tail = 0;
+            for value in &page.lacing {
+                offset += usize::from(*value);
+                if *value < 255 {
+                    tail = offset;
+                }
+            }
+            self.partial = page.data[tail..].to_vec();
+            self.ended = page.is_last();
+            return Ok(());
+        }
+    }
+
     fn add_page(&mut self, page: &OggPage) {
         let serial = *self.serial.get_or_insert(page.serial);
         if page.serial != serial {
@@ -261,13 +318,24 @@ impl<R: Read> OggPacketReader<R> {
         }
 
         let mut offset = 0;
+        let mut ended_here = 0;
         for value in &page.lacing {
             let end = offset + usize::from(*value);
             self.partial.extend_from_slice(&page.data[offset..end]);
             offset = end;
             if *value < 255 {
-                self.packets.push_back(std::mem::take(&mut self.partial));
+                self.packets
+                    .push_back((std::mem::take(&mut self.partial), None));
+                ended_here += 1;
             }
+        }
+        if ended_here > 0
+            && let Some((_, page_end)) = self.packets.back_mut()
+        {
+            *page_end = Some(PageEnd {
+                granule: page.granule_position,
+                last: page.is_last(),
+            });
         }
         if page.is_last() {
             self.ended = true;
@@ -315,11 +383,11 @@ impl OpusHead {
         })
     }
 
-    fn encode(channels: u8) -> Vec<u8> {
+    fn encode(channels: u8, pre_skip: u16) -> Vec<u8> {
         let mut packet = b"OpusHead".to_vec();
         packet.push(1);
         packet.push(channels);
-        packet.extend_from_slice(&0_u16.to_le_bytes());
+        packet.extend_from_slice(&pre_skip.to_le_bytes());
         packet.extend_from_slice(&48_000_u32.to_le_bytes());
         packet.extend_from_slice(&0_i16.to_le_bytes());
         packet.push(0);
@@ -327,14 +395,66 @@ impl OpusHead {
     }
 }
 
+/// An input that can seek or not.
+trait SeekRead: Read + Seek + Send {}
+
+impl<T: Read + Seek + Send> SeekRead for T {}
+
+enum Input {
+    Stream(Box<dyn Read + Send>),
+    Seekable(Box<dyn SeekRead>),
+}
+
+impl Read for Input {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stream(reader) => reader.read(buffer),
+            Self::Seekable(reader) => reader.read(buffer),
+        }
+    }
+}
+
 /// An audio source that gives the Opus packets of an Ogg Opus file without a new encode.
 ///
-/// The packets must be mono or stereo at any frame size of 20 ms or more. Shorter frames
-/// play too slowly, because the send task sends one packet each 20 ms. Pre-skip and the end
-/// trim are not applied. Volume changes need the `opus` feature.
+/// The packets must be mono or stereo. Packets with a duration that is not a multiple of
+/// 20 ms need the `opus` feature: the mixer decodes them and encodes 20 ms frames.
+///
+/// # Pre-skip and end trim
+///
+/// The source applies the pre-skip of the `OpusHead` header and the end trim of the last
+/// page (RFC 7845, sections 4.2 and 4.4) through [`SourceFrame::Opus`]. Only a decode can
+/// drop part of a packet. Thus:
+///
+/// - When the mixer decodes the track (more tracks, a volume change, or short packets), it
+///   drops the pre-skip samples and the samples after the end of the last page.
+/// - When the packets go out without a new encode, the pre-skip samples play (the encoder
+///   start, usually silence) and the last packet plays in full.
+///
+/// The end trim applies only to the last packet of the stream.
+///
+/// # Seek
+///
+/// A source from [`OggOpusSource::open`], [`OggOpusSource::from_bytes`], or
+/// [`OggOpusSource::seekable`] can seek. A source from [`OggOpusSource::new`] cannot seek.
+///
+/// - The seek reads the page headers from the start of the audio to find the last page
+///   before the position. The cost increases with the number of pages before the position.
+/// - Packets that end before the position do not play.
+/// - Without a decode, the audio starts at the start of the packet that contains the
+///   position: at most one packet (usually 20 ms) early.
+/// - With a decode, the mixer drops the samples before the position. The decoder starts at
+///   the new packet without a pre-roll, so the first frame can have a short artifact.
 pub struct OggOpusSource {
-    packets: OggPacketReader<Box<dyn Read + Send>>,
+    packets: OggPacketReader<Input>,
     head: OpusHead,
+    /// The byte offset of the first audio page. `None` when the input cannot seek.
+    data_start: Option<u64>,
+    /// The granule position at the start of the next packet.
+    granule: i64,
+    /// A decode drops the samples before this granule position.
+    discard_until: i64,
+    /// After a seek, packets that end before `discard_until` do not play.
+    skip_before: bool,
 }
 
 impl fmt::Debug for OggOpusSource {
@@ -342,19 +462,34 @@ impl fmt::Debug for OggOpusSource {
         formatter
             .debug_struct("OggOpusSource")
             .field("head", &self.head)
+            .field("granule", &self.granule)
             .finish_non_exhaustive()
     }
 }
 
 impl OggOpusSource {
-    /// Makes a source from a reader. Reads the two header packets.
+    /// Makes a source from a reader. Reads the two header packets. The source cannot seek;
+    /// use [`OggOpusSource::seekable`] for an input that can seek.
     ///
     /// # Errors
     ///
     /// Gives an error when the input is not an Ogg Opus stream with one or two channels.
     pub fn new(reader: impl Read + Send + 'static) -> Result<Self, AudioError> {
-        let mut packets: OggPacketReader<Box<dyn Read + Send>> =
-            OggPacketReader::new(Box::new(reader));
+        Self::with_input(Input::Stream(Box::new(reader)))
+    }
+
+    /// Makes a source that can seek from a reader, for example a file. Reads the two header
+    /// packets.
+    ///
+    /// # Errors
+    ///
+    /// Gives an error when the input is not an Ogg Opus stream with one or two channels.
+    pub fn seekable(reader: impl Read + Seek + Send + 'static) -> Result<Self, AudioError> {
+        Self::with_input(Input::Seekable(Box::new(reader)))
+    }
+
+    fn with_input(input: Input) -> Result<Self, AudioError> {
+        let mut packets = OggPacketReader::new(input);
         let first = packets
             .next_packet()?
             .ok_or_else(|| AudioError::Format("the Ogg input is empty".to_owned()))?;
@@ -372,26 +507,39 @@ impl OggOpusSource {
                 "the second Ogg packet is not an Opus comment header".to_owned(),
             ));
         }
-        Ok(Self { packets, head })
+
+        // RFC 7845 makes the audio start on a new page after the comment header.
+        let data_start = match packets.pages.get_mut() {
+            Input::Seekable(reader) => Some(reader.stream_position()?),
+            Input::Stream(_) => None,
+        };
+        Ok(Self {
+            packets,
+            head,
+            data_start,
+            granule: 0,
+            discard_until: i64::from(head.pre_skip),
+            skip_before: false,
+        })
     }
 
-    /// Makes a source from the bytes of a file.
+    /// Makes a source from the bytes of a file. The source can seek.
     ///
     /// # Errors
     ///
     /// Gives an error when the input is not a valid Ogg Opus stream.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, AudioError> {
-        Self::new(std::io::Cursor::new(bytes))
+        Self::seekable(std::io::Cursor::new(bytes))
     }
 
-    /// Opens a file.
+    /// Opens a file. The source can seek.
     ///
     /// # Errors
     ///
     /// Gives an error when the file cannot be opened or is not a valid Ogg Opus file.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AudioError> {
         let file = File::open(path)?;
-        Self::new(BufReader::new(file))
+        Self::seekable(BufReader::new(file))
     }
 
     /// Gives the identification header.
@@ -404,16 +552,121 @@ impl OggOpusSource {
 impl AudioSource for OggOpusSource {
     fn next_frame(&mut self) -> Result<Option<SourceFrame>, AudioError> {
         loop {
-            let Some(packet) = self.packets.next_packet()? else {
+            let Some((packet, page_end)) = self.packets.next_packet_with_end()? else {
                 return Ok(None);
             };
+            let samples = if packet.is_empty() {
+                0
+            } else {
+                opus_packet_samples(&packet).unwrap_or(960)
+            };
+            let start = self.granule;
+            let end = start + i64::from(samples);
+            self.granule = end;
+
+            let mut discard_end = 0;
+            if let Some(page_end) = page_end.filter(|page_end| page_end.granule >= 0) {
+                if page_end.last {
+                    discard_end = clamp_samples(end - page_end.granule, samples);
+                }
+                // The page tells the exact position. It corrects a count that is wrong, for
+                // example after a packet that is not valid.
+                self.granule = page_end.granule;
+            }
             if packet.is_empty() {
                 continue;
             }
-            let samples = opus_packet_samples(&packet).unwrap_or(960);
-            return Ok(Some(SourceFrame::Opus { packet, samples }));
+
+            let discard_start = clamp_samples(self.discard_until - start, samples);
+            if self.skip_before {
+                if discard_start == samples {
+                    continue;
+                }
+                self.skip_before = false;
+            }
+            return Ok(Some(SourceFrame::Opus {
+                packet,
+                samples,
+                discard_start,
+                discard_end: discard_end.min(samples - discard_start),
+            }));
         }
     }
+
+    fn seek(&mut self, position: Duration) -> Result<Duration, AudioError> {
+        let (Some(data_start), Input::Seekable(reader)) =
+            (self.data_start, self.packets.pages.get_mut())
+        else {
+            return Err(AudioError::Unsupported(
+                "an Ogg Opus source from a reader without seek cannot seek".to_owned(),
+            ));
+        };
+
+        let offset = i64::try_from(duration_to_samples(position)).unwrap_or(i64::MAX);
+        let target = i64::from(self.head.pre_skip).saturating_add(offset);
+        let page = find_page_before(reader.as_mut(), data_start, self.packets.serial, target)?;
+        let (page_offset, granule) = page.unwrap_or((data_start, 0));
+        reader.seek(SeekFrom::Start(page_offset))?;
+
+        self.packets.restart();
+        if page.is_some() {
+            self.packets.skip_page()?;
+        }
+        self.granule = granule;
+        self.discard_until = target;
+        self.skip_before = true;
+        Ok(samples_to_duration(offset.unsigned_abs()))
+    }
+}
+
+/// Converts a sample count to a value in `0..=samples`.
+fn clamp_samples(count: i64, samples: u32) -> u32 {
+    u32::try_from(count.clamp(0, i64::from(samples))).unwrap_or(samples)
+}
+
+/// Finds the last page of the stream that ends at or before the target granule position.
+/// Gives its byte offset and its granule position. Reads only the page headers.
+fn find_page_before(
+    reader: &mut dyn SeekRead,
+    start: u64,
+    serial: Option<u32>,
+    target: i64,
+) -> Result<Option<(u64, i64)>, AudioError> {
+    reader.seek(SeekFrom::Start(start))?;
+    let mut offset = start;
+    let mut found = None;
+    loop {
+        let mut header = [0_u8; HEADER_LEN];
+        if !read_full(reader, &mut header)? {
+            break;
+        }
+        if &header[..4] != CAPTURE_PATTERN {
+            return Err(AudioError::Format(
+                "an Ogg page has no capture pattern".to_owned(),
+            ));
+        }
+        let mut lacing = vec![0_u8; usize::from(header[26])];
+        if !read_full(reader, &mut lacing)? && !lacing.is_empty() {
+            return Err(truncated());
+        }
+
+        let granule = i64::from_le_bytes(header[6..14].try_into().unwrap_or_default());
+        let page_serial = u32::from_le_bytes([header[14], header[15], header[16], header[17]]);
+        // A granule position of -1 tells that no packet ends on the page.
+        if serial.is_none_or(|serial| serial == page_serial) && granule >= 0 {
+            if granule > target {
+                break;
+            }
+            found = Some((offset, granule));
+        }
+
+        let data_len: u64 = lacing.iter().map(|value| u64::from(*value)).sum();
+        reader.seek(SeekFrom::Current(
+            i64::try_from(data_len).unwrap_or(i64::MAX),
+        ))?;
+        offset += (HEADER_LEN + lacing.len()) as u64 + data_len;
+    }
+    Ok(found)
 }
 
 /// Writes Opus packets to an Ogg Opus file, one packet on each page.
@@ -449,7 +702,7 @@ impl<W: Write> OggOpusWriter<W> {
             granule: 0,
             pending: None,
         };
-        this.write_page(&OpusHead::encode(channels), FLAG_FIRST)?;
+        this.write_page(&OpusHead::encode(channels, 0), FLAG_FIRST)?;
         let mut tags = b"OpusTags".to_vec();
         let vendor = b"cordial";
         tags.extend_from_slice(&7_u32.to_le_bytes());
@@ -521,7 +774,7 @@ impl<W: Write> OggOpusWriter<W> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -557,24 +810,15 @@ mod tests {
         assert_eq!(source.head().channels, 2);
         assert_eq!(
             source.next_frame().expect("valid"),
-            Some(SourceFrame::Opus {
-                packet: vec![0xFC, 1, 2, 3],
-                samples: 960
-            })
+            Some(SourceFrame::opus(vec![0xFC, 1, 2, 3]))
         );
         assert_eq!(
             source.next_frame().expect("valid"),
-            Some(SourceFrame::Opus {
-                packet: vec![0xFC; 600],
-                samples: 960
-            })
+            Some(SourceFrame::opus(vec![0xFC; 600]))
         );
         assert_eq!(
             source.next_frame().expect("valid"),
-            Some(SourceFrame::Opus {
-                packet: vec![0x18, 9],
-                samples: 2880
-            })
+            Some(SourceFrame::opus(vec![0x18, 9]))
         );
         assert_eq!(source.next_frame().expect("valid"), None);
     }
@@ -595,7 +839,7 @@ mod tests {
             .encode()
         };
         let mut file = Vec::new();
-        file.extend(page(FLAG_FIRST, 1, 0, vec![19], OpusHead::encode(1)));
+        file.extend(page(FLAG_FIRST, 1, 0, vec![19], OpusHead::encode(1, 0)));
         file.extend(page(FLAG_FIRST, 2, 0, vec![3], b"abc".to_vec()));
         let mut tags = b"OpusTags".to_vec();
         tags.extend_from_slice(&[0; 8]);
@@ -617,6 +861,161 @@ mod tests {
         assert_eq!(packets[0], vec![0xFC; 300]);
         assert_eq!(packets[1], vec![0xF8, 0xFF, 0xFE]);
         assert_eq!(packets[2], vec![0xFC, 7]);
+    }
+
+    /// Builds an Ogg Opus file with `per_page` packets on each audio page. Each packet must
+    /// be shorter than 255 bytes. The last page has `final_granule` when it is given.
+    pub(crate) fn build_file(
+        pre_skip: u16,
+        packets: &[Vec<u8>],
+        per_page: usize,
+        final_granule: Option<i64>,
+    ) -> Vec<u8> {
+        let mut tags = b"OpusTags".to_vec();
+        tags.extend_from_slice(&[0; 8]);
+        let mut pages = vec![
+            (FLAG_FIRST, 0, vec![OpusHead::encode(2, pre_skip)]),
+            (0, 0, vec![tags]),
+        ];
+
+        let mut granule = 0;
+        let chunks: Vec<&[Vec<u8>]> = packets.chunks(per_page).collect();
+        for (index, chunk) in chunks.iter().enumerate() {
+            granule += chunk
+                .iter()
+                .map(|packet| i64::from(opus_packet_samples(packet).expect("valid")))
+                .sum::<i64>();
+            let last = index + 1 == chunks.len();
+            let (flags, page_granule) = match final_granule {
+                Some(value) if last => (FLAG_LAST, value),
+                _ if last => (FLAG_LAST, granule),
+                _ => (0, granule),
+            };
+            pages.push((flags, page_granule, chunk.to_vec()));
+        }
+
+        let mut file = Vec::new();
+        for (sequence, (flags, granule, packets)) in pages.into_iter().enumerate() {
+            let lacing = packets
+                .iter()
+                .map(|packet| u8::try_from(packet.len()).expect("short packet"))
+                .collect();
+            file.extend(
+                OggPage {
+                    header_type: flags,
+                    granule_position: granule,
+                    serial: 7,
+                    sequence: u32::try_from(sequence).expect("small"),
+                    lacing,
+                    data: packets.concat(),
+                }
+                .encode(),
+            );
+        }
+        file
+    }
+
+    /// Gives the next frame as (packet, discard at the start, discard at the end).
+    fn next_opus(source: &mut OggOpusSource) -> Option<(Vec<u8>, u32, u32)> {
+        match source.next_frame().expect("valid")? {
+            SourceFrame::Opus {
+                packet,
+                discard_start,
+                discard_end,
+                ..
+            } => Some((packet, discard_start, discard_end)),
+            other => panic!("Opus expected, got {other:?}"),
+        }
+    }
+
+    /// Ten CELT packets of 20 ms. The second byte is the packet index.
+    fn numbered_packets() -> Vec<Vec<u8>> {
+        (0..10).map(|index| vec![0xFC, index]).collect()
+    }
+
+    #[test]
+    fn pre_skip_and_end_trim() {
+        let packets: Vec<Vec<u8>> = numbered_packets().into_iter().take(5).collect();
+        let file = build_file(1000, &packets, 2, Some(4800 - 300));
+        let mut source = OggOpusSource::from_bytes(file).expect("valid");
+        assert_eq!(source.head().pre_skip, 1000);
+
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 0], 960, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 1], 40, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 2], 0, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 3], 0, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 4], 0, 300)));
+        assert_eq!(next_opus(&mut source), None);
+    }
+
+    #[test]
+    fn seek_by_granule_position() {
+        let file = build_file(312, &numbered_packets(), 3, None);
+        let mut source = OggOpusSource::from_bytes(file.clone()).expect("valid");
+        next_opus(&mut source);
+
+        // 50 ms is granule position 312 + 2400 = 2712, inside packet 2 (1920 to 2880).
+        let position = source.seek(Duration::from_millis(50)).expect("seek");
+        assert_eq!(position, Duration::from_millis(50));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 2], 792, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 3], 0, 0)));
+
+        // Packet 7 is the first packet of the third audio page.
+        source.seek(Duration::from_millis(140)).expect("seek");
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 7], 312, 0)));
+
+        source.seek(Duration::ZERO).expect("seek");
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 0], 312, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 1], 0, 0)));
+
+        source
+            .seek(Duration::from_secs(1))
+            .expect("seek after the end");
+        assert_eq!(next_opus(&mut source), None);
+        source.seek(Duration::from_millis(185)).expect("seek");
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 9], 552, 0)));
+        assert_eq!(next_opus(&mut source), None);
+
+        let mut stream = OggOpusSource::new(std::io::Cursor::new(file)).expect("valid");
+        assert!(matches!(
+            stream.seek(Duration::ZERO),
+            Err(AudioError::Unsupported(_))
+        ));
+    }
+
+    /// A seek to a page whose last packet continues on the next page.
+    #[test]
+    fn seek_with_a_packet_across_pages() {
+        let page = |flags: u8, granule: i64, sequence: u32, lacing: Vec<u8>, data: Vec<u8>| {
+            OggPage {
+                header_type: flags,
+                granule_position: granule,
+                serial: 1,
+                sequence,
+                lacing,
+                data,
+            }
+            .encode()
+        };
+        let mut tags = b"OpusTags".to_vec();
+        tags.extend_from_slice(&[0; 8]);
+        let mut file = Vec::new();
+        file.extend(page(FLAG_FIRST, 0, 0, vec![19], OpusHead::encode(2, 0)));
+        file.extend(page(0, 0, 1, vec![16], tags));
+        // Packet 0 (2 bytes), then 255 bytes of packet 1 (300 bytes).
+        let mut data = vec![0xFC, 0];
+        data.extend_from_slice(&[0xFC; 255]);
+        file.extend(page(0, 960, 2, vec![2, 255], data));
+        // The last 45 bytes of packet 1, then packet 2.
+        let mut data = vec![0xFC; 45];
+        data.extend_from_slice(&[0xFC, 2]);
+        file.extend(page(FLAG_CONTINUED | FLAG_LAST, 2880, 3, vec![45, 2], data));
+
+        let mut source = OggOpusSource::from_bytes(file).expect("valid");
+        source.seek(Duration::from_millis(30)).expect("seek");
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC; 300], 480, 0)));
+        assert_eq!(next_opus(&mut source), Some((vec![0xFC, 2], 0, 0)));
+        assert_eq!(next_opus(&mut source), None);
     }
 
     #[test]

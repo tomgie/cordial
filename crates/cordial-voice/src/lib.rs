@@ -12,7 +12,7 @@
 //! | Transport encryption (rtpsize AEAD modes) | [`crypto`] |
 //! | E2EE interface | [`e2ee`] |
 //! | DAVE end-to-end encryption | [`dave`] |
-//! | Sources, mixer, Ogg Opus, Opus codec | [`audio`] |
+//! | Sources (PCM, Ogg Opus, external programs), mixer, Opus codec | [`audio`] |
 //! | Jitter buffer, receive pipeline | [`receive`] |
 //! | Tokio driver and the call handle | [`Call`] |
 //! | Join and leave through the main gateway | [`VoiceManager`] |
@@ -64,6 +64,7 @@ pub use audio::mixer::{
 };
 pub use audio::ogg::OggOpusSource;
 pub use audio::pcm::PcmSource;
+pub use audio::process::ProcessSource;
 pub use audio::{AudioError, AudioSource, SourceFrame};
 pub use call::{Call, CallConfig, CallError, CallState, VoiceEvent};
 pub use core::ConnectionInfo;

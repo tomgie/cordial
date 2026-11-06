@@ -242,9 +242,9 @@ Audio:
 - [x] Opus encode and decode through `libopus`.
 - [x] Send clock (20 ms), speaking flags, silence frames.
 - [x] Inputs: PCM, Ogg Opus passthrough, `symphonia` decode.
-- [ ] Process input (ffmpeg). `PcmSource::from_reader` reads ffmpeg output already. Ogg pre-skip and end trim.
+- [x] Process input (ffmpeg): `ProcessSource`. Ogg pre-skip and end trim. Opus packets shorter than 20 ms.
 - [x] Mixer: many tracks, volume, pause, queue.
-- [ ] Seek.
+- [x] Seek: `TrackHandle::seek` for PCM in memory, Ogg Opus files, and `symphonia`.
 - [x] Receive: SSRC-to-user map (ops 5, 11, 13), jitter buffer, loss concealment, PCM events.
 - [x] Soundboard helper.
 - [x] Stage helpers (suppress, request to speak). Voice channel status.

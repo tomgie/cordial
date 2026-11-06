@@ -2,6 +2,12 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.12.3
+
+### Changed
+
+- `README.md`: the status line is removed. The vibecoded warning is now below the title, in the place of the status line.
+
 ## 0.12.2
 
 ### Changed

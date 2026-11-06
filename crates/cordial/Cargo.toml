@@ -18,6 +18,8 @@ cache = ["dep:cordial-cache"]
 framework = ["http", "gateway", "cache", "dep:cordial-framework"]
 macros = ["dep:cordial-macros"]
 endpoint = ["dep:cordial-endpoint", "cordial-framework?/endpoint"]
+# An `axum` router for the endpoint.
+axum = ["endpoint", "cordial-endpoint/axum"]
 voice = ["gateway", "dep:cordial-voice"]
 
 [dependencies]
@@ -29,6 +31,16 @@ cordial-endpoint = { workspace = true, optional = true }
 cordial-voice = { workspace = true, optional = true }
 cordial-macros = { workspace = true, optional = true }
 cordial-framework = { workspace = true, optional = true }
+
+[dev-dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "net"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[[example]]
+name = "http_interactions"
+required-features = ["axum"]
 
 [package.metadata.docs.rs]
 all-features = true

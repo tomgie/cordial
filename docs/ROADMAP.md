@@ -148,7 +148,7 @@ Endpoint crate:
 - [x] Webhook events: envelope, PING (204), all event types.
 - [x] `axum` and `hyper` adapters.
 
-Exit: one example bot answers commands over the gateway. A second example answers the same commands over HTTP.
+Exit: one example bot answers commands over the gateway. A second example answers the same commands over HTTP. (Both examples build: `ping` and `http_interactions`. A live run needs a bot token; open.)
 
 ## P5: Cache
 
@@ -165,26 +165,26 @@ Exit: event sequence tests pass (done). A recorded event log of 1 hour replays w
 
 ## P6: Framework and macros
 
-- [ ] `Bot` builder, `Context<S>`, typed state.
-- [ ] Event router with `on::<E>`, intent computation, privileged-intent warnings.
-- [ ] Intent check: missing intents, unused intents, privileged intents against application flags, `MESSAGE_CONTENT` warning (ARCHITECTURE 9.2).
-- [ ] Task model: one task per event, optional ordered mode per guild, panic isolation, error hook.
-- [ ] `#[derive(Command)]`, `#[derive(CommandGroup)]`, `#[derive(Choice)]`, `#[derive(Modal)]`.
-- [ ] Option types: primitives, resolved users, members, roles, channels, attachments, mentionables.
-- [ ] Autocomplete handlers.
-- [ ] Localization (`Localizer` trait).
-- [ ] Checks and cooldowns.
-- [ ] Command sync: normalize, compare by `(type, name)`, plan (create, update, rename, delete, unchanged).
-- [ ] Sync strategies: `Granular` (default), `Bulk`, `Auto`. Dry-run mode. Keep the Entry Point command.
-- [ ] Normalization tests with real responses from Discord (defaults, null versus absent, localizations).
-- [ ] Response state tracking, auto-defer option, late-acknowledge warning.
-- [ ] Component router with `custom_id` patterns.
-- [ ] Collectors (message, reaction, component, modal) with timeouts.
-- [ ] Interaction source: gateway or the endpoint crate.
-- [ ] Graceful shutdown with session export.
-- [ ] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app.
+- [x] `Bot` builder, `Context<S>`, typed state.
+- [x] Event router with `on::<E>`, intent computation, privileged-intent warnings.
+- [x] Intent check: missing intents, unused intents, privileged intents against application flags, `MESSAGE_CONTENT` warning (ARCHITECTURE 9.2).
+- [x] Task model: one task per event, optional ordered mode per shard (thus per guild), panic isolation, error hook.
+- [x] `#[derive(Command)]`, `#[derive(CommandGroup)]`, `#[derive(Choice)]`, `#[derive(Modal)]`.
+- [x] Option types: primitives, resolved users, members, roles, channels, attachments, mentionables.
+- [x] Autocomplete handlers.
+- [x] Localization (`Localizer` trait).
+- [x] Checks and cooldowns.
+- [x] Command sync: normalize, compare by `(type, name)`, plan (create, update, rename, delete, unchanged).
+- [x] Sync strategies: `Granular` (default), `Bulk`, `Auto`. Dry-run mode. Keep the Entry Point command.
+- [ ] Normalization tests with real responses from Discord (defaults, null versus absent, localizations). The tests use responses in the documented shape; a capture from Discord needs a bot token.
+- [x] Response state tracking, auto-defer option, late-acknowledge warning.
+- [x] Component router with `custom_id` patterns.
+- [x] Collectors (event, component, modal) with timeouts.
+- [x] Interaction source: gateway or the endpoint crate.
+- [x] Graceful shutdown with session export.
+- [x] Examples: ping bot, moderation bot, poll bot, modal form, user-installable app, HTTP interactions.
 
-Exit: the examples run. The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
+Exit: the examples run. (They build; a live run needs a bot token.) The first public preview (`0.1.0`) is possible here, without voice and without full HTTP coverage.
 
 ## P7: Full HTTP coverage
 
@@ -219,31 +219,35 @@ Exit: the coverage report is complete. Each endpoint has at least one test with 
 
 Transport:
 
-- [ ] Voice payload types (ops 0..13, 21..31). Close codes.
-- [ ] Sans-IO voice core: Hello, Identify, Ready, Select Protocol, Session Description, heartbeat v8 with `seq_ack`, Resume, buffered resume.
-- [ ] Join and leave through the gateway (op 4, VOICE_STATE_UPDATE, VOICE_SERVER_UPDATE). Null endpoint handling. Channel moves.
-- [ ] UDP: IP discovery, RTP header, keepalive filter, RTCP filter.
-- [ ] AEAD modes: `aead_aes256_gcm_rtpsize`, `aead_xchacha20_poly1305_rtpsize`. Test vectors.
+- [x] Voice payload types (ops 0..13, 21..31). Close codes.
+- [x] Sans-IO voice core: Hello, Identify, Ready, Select Protocol, Session Description, heartbeat v8 with `seq_ack`, Resume, buffered resume.
+- [x] Join and leave through the gateway (op 4, VOICE_STATE_UPDATE, VOICE_SERVER_UPDATE). Null endpoint handling. Channel moves.
+- [x] UDP: IP discovery, RTP header, keepalive filter, RTCP filter.
+- [ ] UDP keepalive send, so that a bot that only receives keeps its NAT mapping.
+- [x] AEAD modes: `aead_aes256_gcm_rtpsize`, `aead_xchacha20_poly1305_rtpsize`. Test vectors.
 
 DAVE:
 
-- [ ] MLS group on `openmls`, ciphersuite 2, basic credentials, external sender.
-- [ ] Binary frame codec (TLS presentation language, MLS varints).
-- [ ] Key package, proposals (append and revoke), commit and welcome, announce commit, welcome.
-- [ ] Transitions: prepare, execute, ready, prepare epoch, invalid commit/welcome recovery.
-- [ ] Per-sender hash ratchet, generations, nonce wrap, 10 s retention of old keys.
-- [ ] Frame encryption and decryption: truncated tag, ULEB128 nonce, unencrypted ranges, supplemental size, `0xFAFA` marker, silence passthrough, replay rejection.
+- [x] MLS group on `openmls`, ciphersuite 2, basic credentials, external sender.
+- [x] Binary frame codec (TLS presentation language, MLS varints).
+- [x] Key package, proposals (append and revoke), commit and welcome, announce commit, welcome.
+- [x] Transitions: prepare, execute, ready, prepare epoch, invalid commit/welcome recovery.
+- [x] Per-sender hash ratchet, generations, nonce wrap, 10 s retention of old keys.
+- [x] Frame encryption and decryption: truncated tag, ULEB128 nonce, unencrypted ranges, supplemental size, `0xFAFA` marker, silence passthrough, replay rejection.
 - [ ] Interoperability tests against `libdave`.
 - [ ] Test in a real voice channel with Discord clients.
 
 Audio:
 
-- [ ] Opus encode and decode through `libopus`.
-- [ ] Send clock (20 ms), speaking flags, silence frames.
-- [ ] Inputs: PCM, Ogg Opus passthrough, `symphonia` decode, process input.
-- [ ] Mixer: many tracks, volume, pause, seek where possible, queue.
-- [ ] Receive: SSRC-to-user map (ops 5, 11, 13), jitter buffer, loss concealment, PCM events.
-- [ ] Soundboard helper. Stage helpers (suppress, request to speak). Voice channel status.
+- [x] Opus encode and decode through `libopus`.
+- [x] Send clock (20 ms), speaking flags, silence frames.
+- [x] Inputs: PCM, Ogg Opus passthrough, `symphonia` decode.
+- [ ] Process input (ffmpeg). `PcmSource::from_reader` reads ffmpeg output already. Ogg pre-skip and end trim.
+- [x] Mixer: many tracks, volume, pause, queue.
+- [ ] Seek.
+- [x] Receive: SSRC-to-user map (ops 5, 11, 13), jitter buffer, loss concealment, PCM events.
+- [x] Soundboard helper.
+- [ ] Stage helpers (suppress, request to speak). Voice channel status.
 
 Exit: a music example plays a file in a DAVE call for 1 hour with Discord clients that listen. A recorder example saves each speaker to a separate file.
 

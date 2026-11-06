@@ -348,8 +348,9 @@ checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "cordial"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
+ "axum",
  "cordial-cache",
  "cordial-endpoint",
  "cordial-framework",
@@ -358,11 +359,14 @@ dependencies = [
  "cordial-macros",
  "cordial-model",
  "cordial-voice",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
 name = "cordial-cache"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cordial-model",
  "dashmap",
@@ -373,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-endpoint"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "bytes",
@@ -388,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-framework"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cordial-cache",
  "cordial-endpoint",
@@ -407,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-gateway"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cordial-http",
  "cordial-model",
@@ -424,7 +428,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-http"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bytes",
  "cordial-http",
@@ -442,7 +446,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-macros"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -452,7 +456,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-model"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -460,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "cordial-voice"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "chacha20poly1305",
@@ -1881,6 +1885,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4050469837a6ff301cd14c1f8f24f88549e6d548f24f64e2148eb0f72cebc51f"
 
 [[package]]
+name = "matchers"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
+dependencies = [
+ "regex-automata",
+]
+
+[[package]]
 name = "matchit"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1987,6 +2000,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nu-ansi-term"
+version = "0.50.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2918,6 +2940,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sharded-slab"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3273,6 +3304,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "tinystr"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3513,6 +3553,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tracing-subscriber"
+version = "0.3.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
+dependencies = [
+ "matchers",
+ "nu-ansi-term",
+ "once_cell",
+ "regex-automata",
+ "sharded-slab",
+ "thread_local",
+ "tracing",
+ "tracing-core",
 ]
 
 [[package]]
@@ -3908,7 +3964,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
 ]

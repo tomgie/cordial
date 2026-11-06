@@ -12,6 +12,7 @@
 //! | `framework` | `framework` | yes |
 //! | `macros` | `macros` | yes |
 //! | `endpoint` | `endpoint` | no |
+//! | `axum` | `endpoint::axum` | no |
 //! | `voice` | `voice` | no |
 
 pub use cordial_model as model;

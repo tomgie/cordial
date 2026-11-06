@@ -403,7 +403,7 @@ async fn main() -> Result<(), Error> {
 
 - `on::<E>(handler)` registers a typed handler for one event type.
 - The router computes the required intents and the `EventType` filter from its handlers. The builder warns when a handler needs a privileged intent that is not on.
-- Each event runs in a new task by default. A setting gives ordered handling for each guild.
+- Each event runs in a new task by default. `EventOrder::PerShard` runs the events of each shard in order. All events of a guild come from one shard, so this keeps the order of each guild. Interactions always run at the same time, because of the 3-second limit.
 - A handler error goes to one error hook. A panic in a handler does not stop the bot.
 
 Intent check (on by default, configurable to "warn", "error", or "off"):
@@ -448,7 +448,7 @@ async fn ban(ctx: CommandContext<AppState>, args: Ban) -> Result<(), Error> {
   - `Choice` on an enum: fixed choices.
   - `Modal` on a struct: a modal with Label components, and parsing of the submit data.
 - The macros generate the command definition and the parser. The same source of truth gives both. Thus they cannot disagree.
-- Autocomplete: an option with `autocomplete = handler`.
+- Autocomplete: the option has `#[option(autocomplete)]`. The handler is registered with `BotBuilder::autocomplete::<C>(handler)` and gives the choices. Reason: the macro then does not need the state type of the bot.
 - Localization: a `Localizer` trait gives names and descriptions for each locale.
 - Checks: permission checks, guild-only checks, cooldowns, and user checks run before the handler.
 - Context menu commands (USER, MESSAGE) and the Entry Point command are supported.
@@ -465,7 +465,7 @@ Command registration (for global commands and for each guild scope):
 |---|---|---|
 | Unchanged | Same key, same normalized content | None |
 | Update | Same key, different content | `PATCH .../commands/{id}` |
-| Rename | Local `previous_name` matches a remote command | `PATCH .../commands/{id}` (keeps the ID and the permissions) |
+| Rename | One of the local `previous_names` matches a remote command | `PATCH .../commands/{id}` (keeps the ID and the permissions) |
 | Create | Local command with no remote match | `POST .../commands` |
 | Delete | Remote command with no local match | `DELETE .../commands/{id}` |
 
@@ -482,7 +482,9 @@ Rules:
 
 - Never delete the Entry Point command (type 4) unless the user asks for it.
 - A dry-run mode gives the plan and sends nothing.
-- The plan is in the log: "created 1, updated 2, deleted 1, unchanged 14".
+- The plan is in the log: "created 1, updated 2, renamed 0, deleted 1, unchanged 14".
+- An update or a rename is a PATCH. A PATCH keeps each field that it does not send, so the edit always sends `nsfw`, the options, `default_member_permissions` (null for everyone), and empty localization maps to clear old values.
+- `integration_types`, `contexts`, and `handler` are compared only when the local definition sets them. The command default of `integration_types` is the app configuration, which one command cannot see.
 - If one request fails, stop and report the actions that were applied. The next run makes a new plan from the new remote state, so the process always converges.
 - Strategy `Bulk` sends one `PUT` (bulk overwrite) when the plan has changes. Use it when a scope has many changes, for example the first registration of a large bot.
 - Strategy `Auto` picks `Bulk` when the number of actions is more than a set threshold, else `Granular`.

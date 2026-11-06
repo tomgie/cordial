@@ -96,6 +96,15 @@ impl User {
             _ => ((self.id.get() >> 22) % 6) as u8,
         }
     }
+
+    /// Gives the URL of the avatar, or of the default avatar when the user has none.
+    #[must_use]
+    pub fn avatar_url(&self) -> crate::cdn::ImageUrl {
+        match &self.avatar {
+            Some(hash) => crate::cdn::user_avatar(self.id, hash),
+            None => crate::cdn::default_avatar(self.default_avatar_index()),
+        }
+    }
 }
 
 crate::discord_flags! {

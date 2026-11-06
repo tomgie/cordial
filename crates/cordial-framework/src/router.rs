@@ -9,7 +9,7 @@ use std::sync::Arc;
 use cordial_model::command::{CommandDefinition, CommandOptionChoice, CommandType};
 use cordial_model::gateway::event::{Event, EventType, EventTypes};
 use cordial_model::id::GuildId;
-use cordial_model::interaction::{Interaction, InteractionType};
+use cordial_model::interaction::{Interaction, InteractionMessage, InteractionType};
 use futures_util::FutureExt;
 
 use crate::check::{Check, Cooldown};
@@ -29,6 +29,8 @@ type AutocompleteFn<S> = Arc<
     dyn Fn(InteractionContext<S>, Focused) -> BoxFuture<Vec<CommandOptionChoice>> + Send + Sync,
 >;
 type ErrorHook<S> = Arc<dyn Fn(Context<S>, HandlerError) -> BoxFuture<()> + Send + Sync>;
+type InteractionErrorHook<S> =
+    Arc<dyn Fn(InteractionContext<S>, HandlerError) -> BoxFuture<()> + Send + Sync>;
 
 /// The option that has focus in an autocomplete interaction.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +81,7 @@ pub(crate) struct Router<S> {
     pub(crate) components: Vec<PatternEntry<S>>,
     pub(crate) modals: Vec<PatternEntry<S>>,
     pub(crate) error_hook: Option<ErrorHook<S>>,
+    pub(crate) interaction_error_hook: Option<InteractionErrorHook<S>>,
     pub(crate) slow_response: SlowResponse,
 }
 
@@ -91,6 +94,7 @@ impl<S> Default for Router<S> {
             components: Vec::new(),
             modals: Vec::new(),
             error_hook: None,
+            interaction_error_hook: None,
             slow_response: SlowResponse::default(),
         }
     }
@@ -105,6 +109,7 @@ impl<S: Send + Sync + 'static> Router<S> {
             && self.components.is_empty()
             && self.modals.is_empty()
             && self.error_hook.is_none()
+            && self.interaction_error_hook.is_none()
     }
 
     /// Gives the event types that the handlers need.
@@ -177,26 +182,34 @@ impl<S: Send + Sync + 'static> Router<S> {
         }
     }
 
-    /// Handles one interaction to the end. Gives the response tracker at once, so that an
-    /// HTTP source can wait for the initial response.
-    pub(crate) fn spawn_interaction(
+    /// Gives an interaction to the collectors, or else to the handlers. Gives the response
+    /// tracker at once, so that an HTTP source can wait for the initial response.
+    pub(crate) fn route_interaction(
         self: &Arc<Self>,
-        context: Context<S>,
-        interaction: Arc<Interaction>,
+        context: &Context<S>,
+        event: &Arc<Event>,
+        interaction: &Interaction,
     ) -> Arc<ResponseTracker> {
         let tracker = ResponseTracker::new();
-        let interaction_context =
-            InteractionContext::new(context.clone(), interaction, Arc::clone(&tracker));
-
-        if interaction_context.interaction().kind != InteractionType::ApplicationCommandAutocomplete
-        {
-            tokio::spawn(watch_response(
-                interaction_context.clone(),
-                self.slow_response,
-            ));
+        context
+            .shared
+            .keep_tracker(interaction.id, Arc::clone(&tracker));
+        let taken = context.shared.collectors.dispatch(event);
+        if taken {
+            return tracker;
         }
-        let router = Arc::clone(self);
-        tokio::spawn(async move { router.run_interaction(context, interaction_context).await });
+
+        context.shared.take_tracker(interaction.id);
+        if self.handles_interactions() {
+            let interaction_context = InteractionContext::new(
+                context.clone(),
+                Arc::new(interaction.clone()),
+                Arc::clone(&tracker),
+            );
+            let router = Arc::clone(self);
+            let context = context.clone();
+            tokio::spawn(async move { router.run_interaction(context, interaction_context).await });
+        }
         tracker
     }
 
@@ -205,34 +218,55 @@ impl<S: Send + Sync + 'static> Router<S> {
         context: Context<S>,
         interaction: InteractionContext<S>,
     ) {
-        let Some((source, future)) = self.interaction_future(&interaction).await else {
+        let Some((source, future)) = self.interaction_future(&interaction) else {
             return;
         };
+        // The timer starts only for an interaction with a handler. An unknown command fails
+        // fast in the Discord client, and does not show "thinking" for 15 minutes.
+        if interaction.interaction().kind != InteractionType::ApplicationCommandAutocomplete {
+            tokio::spawn(watch_response(interaction.clone(), self.slow_response));
+        }
 
-        let succeeded = self.guard(&context, source, future).await;
-        let state = interaction.response_state().await;
-        if state == ResponseState::Pending && !succeeded && self.error_hook.is_none() {
-            // Without a response, the user sees "The application did not respond".
-            let reply = interaction.reply("An error occurred.").ephemeral();
-            if let Err(error) = reply.await {
-                tracing::warn!(%error, "the error reply failed");
+        let kind = match AssertUnwindSafe(future).catch_unwind().await {
+            Ok(Ok(())) => {
+                if interaction.response_state().await == ResponseState::Pending {
+                    tracing::warn!(
+                        interaction_id = %interaction.interaction().id,
+                        "the handler ended without a response to the interaction"
+                    );
+                }
+                return;
             }
-        } else if state == ResponseState::Pending && succeeded {
-            tracing::warn!(
-                interaction_id = %interaction.interaction().id,
-                "the handler ended without a response to the interaction"
-            );
+            Ok(Err(kind)) => kind,
+            Err(panic) => HandlerErrorKind::Panic(panic_message(panic.as_ref())),
+        };
+        let error = HandlerError { source, kind };
+
+        match &self.interaction_error_hook {
+            Some(hook) => {
+                let hook = hook(interaction, error);
+                if let Err(panic) = AssertUnwindSafe(hook).catch_unwind().await {
+                    tracing::error!(
+                        panic = panic_message(panic.as_ref()),
+                        "the interaction error hook panicked"
+                    );
+                }
+            }
+            None => {
+                self.report(&context, error).await;
+                default_failure_response(&interaction).await;
+            }
         }
     }
 
     /// Finds the handler of an interaction and gives its future.
-    async fn interaction_future(
+    fn interaction_future(
         &self,
         context: &InteractionContext<S>,
     ) -> Option<(ErrorSource, BoxFuture<Result<(), HandlerErrorKind>>)> {
         let interaction = context.interaction();
         match interaction.kind {
-            InteractionType::ApplicationCommand => self.command_future(context).await,
+            InteractionType::ApplicationCommand => self.command_future(context),
             InteractionType::ApplicationCommandAutocomplete => self.autocomplete_future(context),
             InteractionType::MessageComponent => {
                 let custom_id = &interaction.component_data()?.custom_id;
@@ -246,7 +280,9 @@ impl<S: Send + Sync + 'static> Router<S> {
         }
     }
 
-    async fn command_future(
+    /// Gives the future of a command: the checks, the cooldown, and the handler. The checks
+    /// run in the future, so that a panic in a check goes to the error hook.
+    fn command_future(
         &self,
         context: &InteractionContext<S>,
     ) -> Option<(ErrorSource, BoxFuture<Result<(), HandlerErrorKind>>)> {
@@ -260,27 +296,27 @@ impl<S: Send + Sync + 'static> Router<S> {
         };
         let source = ErrorSource::Command(data.name.clone());
 
-        for check in &entry.checks {
-            if let Err(failure) = check.run(context.clone()).await {
-                self.refuse(context, failure.message).await;
-                return None;
+        let checks = entry.checks.clone();
+        let cooldown = entry.cooldown.clone();
+        let run = Arc::clone(&entry.run);
+        let context = context.clone();
+        let future = async move {
+            for check in &checks {
+                if let Err(failure) = check.run(context.clone()).await {
+                    refuse(&context, failure.message).await;
+                    return Ok(());
+                }
             }
-        }
-        if let Some(cooldown) = &entry.cooldown
-            && let Err(wait) = cooldown.try_use(context)
-        {
-            let message = format!("Try again in {} seconds.", wait.as_secs().max(1));
-            self.refuse(context, message).await;
-            return None;
-        }
-
-        Some((source, (entry.run)(context.clone())))
-    }
-
-    async fn refuse(&self, context: &InteractionContext<S>, message: String) {
-        if let Err(error) = context.reply(message).ephemeral().await {
-            tracing::warn!(%error, "the reply of a failed check failed");
-        }
+            if let Some(cooldown) = &cooldown
+                && let Err(wait) = cooldown.try_use(&context)
+            {
+                let message = format!("Try again in {} seconds.", wait.as_secs().max(1));
+                refuse(&context, message).await;
+                return Ok(());
+            }
+            run(context).await
+        };
+        Some((source, Box::pin(future)))
     }
 
     fn autocomplete_future(
@@ -339,6 +375,36 @@ impl<S: Send + Sync + 'static> Router<S> {
         };
         let component_context = ComponentContext::new(context.clone(), params);
         Some((source(custom_id.to_owned()), (entry.run)(component_context)))
+    }
+}
+
+async fn refuse<S: Send + Sync + 'static>(context: &InteractionContext<S>, message: String) {
+    if let Err(error) = context.reply(message).ephemeral().await {
+        tracing::warn!(%error, "the reply of a failed check failed");
+    }
+}
+
+/// Tells the user that the interaction failed. Without a response, the user sees "The
+/// application did not respond", or "thinking" for 15 minutes after a defer.
+async fn default_failure_response<S: Send + Sync + 'static>(context: &InteractionContext<S>) {
+    const TEXT: &str = "An error occurred.";
+
+    let result = match context.response_state().await {
+        ResponseState::Pending
+            if context.interaction().kind == InteractionType::ApplicationCommandAutocomplete =>
+        {
+            context.autocomplete(Vec::new()).await
+        }
+        ResponseState::Pending => context.reply(TEXT).ephemeral().await,
+        ResponseState::Deferred { .. } => context.edit_reply(TEXT).await.map(drop),
+        ResponseState::DeferredUpdate => context
+            .followup(InteractionMessage::text(TEXT).ephemeral())
+            .await
+            .map(drop),
+        _ => Ok(()),
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, "the error response failed");
     }
 }
 

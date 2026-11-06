@@ -127,13 +127,10 @@ fn member_remove_removes_the_user() {
 fn guild_delete_removes_everything() {
     let cache = loaded_cache(ResourceTypes::all());
 
-    cache.update(&event(
-        "GUILD_DELETE",
-        &json!({"id": "100", "unavailable": true}),
-    ));
+    cache.update(&event("GUILD_DELETE", &json!({"id": "100"})));
 
     assert!(cache.guild(GUILD).is_none());
-    assert!(cache.is_guild_unavailable(GUILD));
+    assert!(!cache.is_guild_unavailable(GUILD));
     assert!(cache.channel(TEXT).is_none());
     assert!(cache.role(MODERATOR).is_none());
     assert!(cache.member(GUILD, MEMBER).is_none());
@@ -381,5 +378,143 @@ fn cached_type_sizes() {
     assert!(
         size_of::<CachedMember>() < 512,
         "members are the most numerous objects"
+    );
+}
+
+#[test]
+fn outage_keeps_the_data_and_the_next_create_replaces_channels_and_roles() {
+    let cache = loaded_cache(ResourceTypes::all());
+
+    cache.update(&event(
+        "GUILD_DELETE",
+        &json!({"id": "100", "unavailable": true}),
+    ));
+    assert!(cache.is_guild_unavailable(GUILD));
+    assert!(
+        cache.member(GUILD, MEMBER).is_some(),
+        "an outage keeps the members"
+    );
+
+    // During the outage, the secret channel and the moderator role were deleted.
+    let mut guild = guild_create();
+    guild["channels"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|channel| channel["id"] != "11");
+    guild["threads"] = json!([]);
+    guild["roles"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|role| role["id"] != "50");
+    cache.update(&event("GUILD_CREATE", &guild));
+
+    assert!(!cache.is_guild_unavailable(GUILD));
+    assert!(cache.channel(SECRET).is_none());
+    assert!(cache.channel(THREAD).is_none());
+    assert!(cache.role(MODERATOR).is_none());
+    assert!(cache.channel(TEXT).is_some());
+}
+
+#[test]
+fn channel_delete_removes_its_threads() {
+    let cache = loaded_cache(ResourceTypes::all());
+
+    cache.update(&event(
+        "CHANNEL_DELETE",
+        &json!({"id": "11", "type": 0, "guild_id": "100", "name": "secret", "position": 1}),
+    ));
+
+    assert!(cache.channel(SECRET).is_none());
+    assert!(
+        cache.channel(THREAD).is_none(),
+        "the thread of the channel goes too"
+    );
+    assert!(cache.channel(TEXT).is_some());
+}
+
+#[test]
+fn thread_list_sync_removes_threads_that_are_not_active() {
+    let cache = loaded_cache(ResourceTypes::all());
+
+    cache.update(&event(
+        "THREAD_LIST_SYNC",
+        &json!({"guild_id": "100", "channel_ids": ["11"], "threads": [], "members": []}),
+    ));
+
+    assert!(cache.channel(THREAD).is_none());
+    assert!(cache.channel(SECRET).is_some());
+}
+
+#[test]
+fn ready_removes_guilds_that_the_bot_left_while_offline() {
+    let cache = loaded_cache(ResourceTypes::all());
+
+    cache.update(&event(
+        "READY",
+        &json!({"v": 10, "user": user(99), "guilds": [], "session_id": "s2",
+                "resume_gateway_url": "wss://x", "application": {"id": "99", "flags": 0}}),
+    ));
+
+    assert!(cache.guild(GUILD).is_none());
+    assert!(cache.channel(TEXT).is_none());
+    assert_eq!(cache.stats().members, 0);
+}
+
+#[test]
+fn ready_of_another_shard_keeps_the_guild() {
+    let cache = loaded_cache(ResourceTypes::all());
+
+    // Guild 100 is on shard 0 of 2: (100 >> 22) % 2 == 0.
+    cache.update(&event(
+        "READY",
+        &json!({"v": 10, "user": user(99), "guilds": [], "session_id": "s2", "shard": [1, 2],
+                "resume_gateway_url": "wss://x", "application": {"id": "99", "flags": 0}}),
+    ));
+
+    assert!(cache.guild(GUILD).is_some());
+}
+
+#[test]
+fn member_remove_removes_the_voice_state() {
+    let cache = loaded_cache(ResourceTypes::all());
+    cache.update(&event(
+        "VOICE_STATE_UPDATE",
+        &json!({"guild_id": "100", "channel_id": "10", "user_id": "2", "session_id": "x",
+                "deaf": false, "mute": false, "self_deaf": false, "self_mute": false,
+                "self_video": false, "suppress": false, "request_to_speak_timestamp": null}),
+    ));
+
+    cache.update(&event(
+        "GUILD_MEMBER_REMOVE",
+        &json!({"guild_id": "100", "user": user(2)}),
+    ));
+
+    assert!(cache.voice_state(GUILD, MEMBER).is_none());
+}
+
+#[test]
+fn message_buffers_without_the_channel_resource_go_with_the_guild() {
+    let cache = Cache::with_message_capacity(ResourceTypes::GUILD | ResourceTypes::MESSAGE, 5);
+    cache.update(&event("GUILD_CREATE", &guild_create()));
+    let mut message = json!({
+        "id": "1", "channel_id": "10", "guild_id": "100", "author": user(2), "content": "m",
+        "timestamp": "2026-01-01T00:00:00+00:00", "edited_timestamp": null, "tts": false,
+        "mention_everyone": false, "mentions": [], "mention_roles": [], "attachments": [],
+        "embeds": [], "pinned": false, "type": 0
+    });
+    cache.update(&event("MESSAGE_CREATE", &message));
+    message["id"] = json!("2");
+    message["channel_id"] = json!("777");
+    message["guild_id"] = Value::Null;
+    cache.update(&event("MESSAGE_CREATE", &message));
+    assert_eq!(cache.stats().messages, 2);
+
+    cache.update(&event("GUILD_DELETE", &json!({"id": "100"})));
+
+    assert_eq!(cache.stats().messages, 1, "only the DM buffer stays");
+    assert!(
+        ResourceTypes::MESSAGE
+            .event_types()
+            .contains(cordial_model::gateway::EventType::ChannelDelete)
     );
 }

@@ -2,6 +2,37 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.9.0
+
+Fixes from a review of the framework and the cache.
+
+### Fixed
+
+- A long cooldown panicked on Windows at the first use (an `Instant` underflow).
+- An automatic public defer made a later ephemeral reply public. The reply now replaces the loading message with an ephemeral follow-up.
+- A panic in a collector filter stopped the bot. Now it stops only that collector. Filters run without the collector lock, so a filter can start or stop a collector.
+- A handler that failed after a defer left the user with "thinking" for 15 minutes. The default error response now fits the response state. A failed autocomplete gets empty choices.
+- A panic in a check skipped the error handling.
+- `Context::shard_for_guild` used the shard count of the process, not of the bot.
+- Interactions over HTTP skipped the collectors.
+- An interaction that arrived as a collector timed out was lost.
+- The automatic defer of a modal from a slash command used a type that Discord rejects.
+- `update_message` after a reply edited the reply. It now gives `ResponseError::NotComponentMessage`.
+- The automatic defer ran for interactions with no handler.
+- Cache: a channel delete now removes its threads. `THREAD_LIST_SYNC` removes threads that are no longer active. A new `GUILD_CREATE` replaces the channels, threads, and roles. `READY` removes the guilds that the bot left while offline. A member removal removes the voice state.
+- Cache: message buffers of deleted channels and removed guilds are removed also without the `CHANNEL` resource, and the number of buffers has a limit (10,000).
+
+### Changed
+
+- Cache: an outage (`GUILD_DELETE` with `unavailable`) keeps the guild data. Only a removal deletes it.
+
+### Added
+
+- `BotBuilder::on_interaction_error`: a hook that gets the interaction context and can answer the user.
+- `BotBuilder::extra_events`: request event types for collectors. A collector of a type that the bot does not request logs a warning.
+- `BotBuilder::sync_guilds`: sync guild scopes that have no commands now, to remove old guild commands.
+- `ResponseState::Updated`.
+
 ## 0.8.1
 
 ### Added

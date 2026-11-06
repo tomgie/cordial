@@ -168,14 +168,20 @@ impl Cooldown {
             CooldownScope::Global => 0,
         };
 
+        // No `now - duration`: on Windows an `Instant` counts from boot, so it can underflow.
         let now = Instant::now();
-        let mut entry = self.last_use.entry(key).or_insert(now - self.duration);
-        let elapsed = now.saturating_duration_since(*entry);
-        if elapsed < self.duration {
-            return Err(self.duration - elapsed);
+        match self.last_use.entry(key) {
+            dashmap::Entry::Occupied(mut entry) => {
+                let elapsed = now.saturating_duration_since(*entry.get());
+                if elapsed < self.duration {
+                    return Err(self.duration - elapsed);
+                }
+                entry.insert(now);
+            }
+            dashmap::Entry::Vacant(entry) => {
+                entry.insert(now);
+            }
         }
-        *entry = now;
-        drop(entry);
 
         // Remove old entries now and then, so that the map does not grow without limit.
         if self.last_use.len() > 10_000 {

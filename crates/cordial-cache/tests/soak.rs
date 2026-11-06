@@ -166,11 +166,8 @@ impl Soak {
     }
 
     fn delete_guild(&mut self, guild_id: u64) {
-        let outage = self.random.below(2) == 0;
-        self.send(
-            "GUILD_DELETE",
-            &json!({"id": guild_id.to_string(), "unavailable": outage}),
-        );
+        // A removal, not an outage: an outage keeps the data (see `outage_keeps_the_data`).
+        self.send("GUILD_DELETE", &json!({"id": guild_id.to_string()}));
         self.guilds.remove(&guild_id);
     }
 

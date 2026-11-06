@@ -2,6 +2,17 @@
 
 All crates of the workspace use one version. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Before 1.0.0, a minor version can break the public API.
 
+## 0.9.2
+
+### Fixed
+
+- The rate limiter panicked on a very large wait time in a response header (`Instant` overflow). Waits now have a limit of 30 years. Found while writing the fuzz targets.
+
+### Added
+
+- Fuzz targets for all decoders (`fuzz/`), with a stable smoke test in CI.
+- Benchmarks with criterion, and `docs/BENCHMARKS.md`.
+
 ## 0.9.1
 
 Documentation only. The library behavior does not change.

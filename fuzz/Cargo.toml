@@ -1,0 +1,119 @@
+# Fuzz targets for the decoders of cordial. See `fuzz/README.md`.
+#
+# This package is not a member of the main workspace. Normal builds do not compile it.
+
+[package]
+name = "cordial-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# An own workspace, so that the main workspace does not include this package.
+[workspace]
+
+[features]
+default = []
+# The libFuzzer runtime. Only the `[[bin]]` targets need it. `cargo fuzz` needs nightly.
+libfuzzer = ["dep:libfuzzer-sys"]
+
+[dependencies]
+bytes = "1"
+cordial-cache = { path = "../crates/cordial-cache" }
+cordial-endpoint = { path = "../crates/cordial-endpoint" }
+cordial-framework = { path = "../crates/cordial-framework" }
+cordial-gateway = { path = "../crates/cordial-gateway", features = ["zlib", "zstd", "fuzzing"] }
+cordial-http = { path = "../crates/cordial-http", default-features = false, features = ["testing"] }
+cordial-model = { path = "../crates/cordial-model" }
+cordial-voice = { path = "../crates/cordial-voice", features = ["fuzzing"] }
+ed25519-dalek = "3"
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+http = "1"
+libfuzzer-sys = { version = "0.4", optional = true }
+serde = "1"
+serde_json = { version = "1", features = ["raw_value"] }
+tokio = { version = "1.47", default-features = false, features = ["rt", "time", "test-util"] }
+zstd = { version = "0.14", default-features = false }
+
+# Optimize the smoke test a little: the crypto code is very slow without optimization.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[[bin]]
+name = "gateway_payload"
+path = "fuzz_targets/gateway_payload.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "gateway_compression"
+path = "fuzz_targets/gateway_compression.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "http_response"
+path = "fuzz_targets/http_response.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "voice_packet"
+path = "fuzz_targets/voice_packet.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "voice_gateway"
+path = "fuzz_targets/voice_gateway.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "dave_frame"
+path = "fuzz_targets/dave_frame.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "ogg"
+path = "fuzz_targets/ogg.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "endpoint"
+path = "fuzz_targets/endpoint.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "command_parse"
+path = "fuzz_targets/command_parse.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]

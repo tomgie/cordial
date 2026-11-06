@@ -253,8 +253,8 @@ Exit: a music example plays a file in a DAVE call for 1 hour with Discord client
 
 ## P9: Hardening and release
 
-- [ ] Fuzz targets for all decoders (gateway, HTTP responses, voice packets, DAVE frames).
-- [ ] Benchmarks: event decode rate, cache memory, rate limiter overhead.
+- [x] Fuzz targets for all decoders (gateway, HTTP responses, voice packets, DAVE frames). See `fuzz/README.md`. A stable smoke test runs in CI.
+- [x] Benchmarks: event decode rate, cache memory, rate limiter overhead. See `docs/BENCHMARKS.md`.
 - [x] Soak test, synthetic: 1000 guilds and 500,000 events through the cache, with a shadow model and a leak check (`crates/cordial-cache/tests/soak.rs`).
 - [ ] Soak test, live: 1000+ guilds on a test application, or a recorded large-bot event log. Needs a bot token.
 - [x] Guide book (mdBook): start, intents, commands, components, sharding, cache, voice, HTTP interactions, deploy.

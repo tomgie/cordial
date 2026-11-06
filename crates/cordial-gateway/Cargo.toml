@@ -15,6 +15,9 @@ default = ["zlib"]
 zlib = ["dep:flate2"]
 # Transport compression `zstd-stream` (C library).
 zstd = ["dep:zstd"]
+# Internal: exposes the decompression context for fuzz targets and benchmarks. It is not part
+# of the public API.
+fuzzing = []
 
 [dependencies]
 cordial-model.workspace = true
@@ -30,7 +33,14 @@ tracing.workspace = true
 zstd = { workspace = true, optional = true }
 
 [dev-dependencies]
+cordial-gateway = { path = ".", features = ["fuzzing"] }
+criterion.workspace = true
+flate2.workspace = true
 tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util", "net"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "inflate"
+harness = false

@@ -34,8 +34,13 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 cordial-http = { path = ".", features = ["testing"] }
 tokio = { workspace = true, features = ["time", "sync", "macros", "rt", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "rate_limiter"
+harness = false

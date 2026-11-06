@@ -13,5 +13,12 @@ authors.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+criterion.workspace = true
+
 [lints]
 workspace = true
+
+[[bench]]
+name = "event_decode"
+harness = false
